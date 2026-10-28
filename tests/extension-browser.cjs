@@ -14,7 +14,7 @@ const people = url => {
  const designer = url.searchParams.get('keywords').includes('designer');
  const companyIndex = Number(company.at(-1));
  const filtered = url.searchParams.has('currentCompany');
- const cards = Array.from({length:8}, (_, i) => `<a componentkey="auto-component-${i}" href="https://www.linkedin.com/in/browser-test-person-${companyIndex}-${founder ? 'f' : designer ? 'd' : 'h'}-${i}/">Test Person ${i}<br> • 2nd<br>${founder ? 'Co-founder' : designer ? 'UX Designer' : 'Recruiter'} at ${company}<br>Bengaluru, India</a>`).join('');
+ const cards = Array.from({length:8}, (_, i) => `<a componentkey="auto-component-${i}" href="https://www.linkedin.com/in/browser-test-person-${companyIndex}-${founder ? 'f' : designer ? 'd' : 'h'}-${i}/">Test Person ${i}<br> • 2nd<br>${founder ? 'Co-founder' : designer ? 'UX Designer' : 'Recruiter'} at ${company}<br>${founder ? 'Indore, India' : 'Bengaluru, India'}</a>`).join('');
  return `<!doctype html><html><body>${filtered || companyIndex === 4 ? cards : `<div role="button"><div aria-label="Filter by Current companies">Current companies</div></div><div id="filter"></div><script>document.querySelector('[role=button]').onclick=()=>{document.querySelector('#filter').innerHTML='<input placeholder="Add a company"><div role="listbox"></div><a href="#">Show results</a>';document.querySelector('input').oninput=()=>{document.querySelector('[role=listbox]').innerHTML='<div role="option">${company}</div>';document.querySelector('[role=option]').onclick=()=>{};};document.querySelector('a').onclick=e=>{e.preventDefault();const u=new URL(location.href);u.searchParams.set('currentCompany','["1"]');location.href=u.href;};};</script>`}</body></html>`;
 };
 const profile = `<!doctype html><html><body><main><button>Connect</button></main><script>document.querySelector('button').onclick=()=>{document.body.dataset.connectClicked='true'}</script></body></html>`;
@@ -28,7 +28,7 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
   writeFileSync(backgroundPath, readFileSync(backgroundPath, 'utf8').replace('http://127.0.0.1:4318', 'http://127.0.0.1:14319'));
   const manifestPath = path.join(extension, 'manifest.json');
   writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replaceAll('127.0.0.1:4318', '127.0.0.1:14319'));
-  const server = spawn(process.execPath, ['--import', './tests/fixtures/funding-fetch.mjs', 'server/index.mjs'], { env: { ...process.env, PORT: '14319', DATA_DIR: path.join(dir, 'data') }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const server = spawn(process.execPath, ['server/index.mjs'], { env: { ...process.env, PORT: '14319', DATA_DIR: path.join(dir, 'data') }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let context;
   try {
     await new Promise((resolve, reject) => { const timeout = setTimeout(() => reject(Error('Server startup timed out')), 10000); server.stdout.once('data', () => { clearTimeout(timeout); resolve(); }); server.once('error', reject); });
@@ -66,7 +66,7 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
     const state = await (await page.request.get('http://127.0.0.1:14319/api/state')).json();
     assert.equal(state.contacts.length, 30);
     assert.equal(state.contacts.filter(person => person.contactRole === 'founder').length, 10);
-    assert.ok(state.contacts.filter(person => person.contactRole === 'founder').every(person => person.funding?.url && /pitch/i.test(person.message)));
+    assert.ok(state.contacts.filter(person => person.contactRole === 'founder').every(person => !person.funding && person.location.includes('Indore') && /pitch/i.test(person.message)));
     assert.deepEqual([...jobQueries].sort(), ['Delhi:Product Designer', 'Delhi:UX Designer', 'Mumbai:Product Designer', 'Mumbai:UX Designer']);
     assert.equal(state.jobs.filter(job => job.sourceRecency === 'Past 24 hours (LinkedIn filter)').length, 3, 'Viewed/Applied cards inherit the active past-day filter');
     mkdirSync('test-results', { recursive: true });
@@ -116,7 +116,7 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
     const confirmed = await (await page.request.get('http://127.0.0.1:14319/api/state')).json();
     assert.equal(confirmed.contacts.find(p => p.id === recipient.id).status, 'Send confirmed');
     assert.equal(confirmed.contacts.find(p => p.id === recipient.id).deliveryEvidence, 'LinkedIn send confirmed by Chrome helper');
-    console.log('PASS: real Chrome extension imported 20 team contacts plus 10 funded metro founders in one scan, filled a connection note, and marked done after a fixture send confirmation.');
+    console.log('PASS: real Chrome extension imported 20 team contacts plus 10 founders outside metros without funding reports, filled a note, and marked done after fixture send confirmation.');
   } finally {
     if (context) await context.close();
     server.kill(); await new Promise(resolve => server.exitCode !== null ? resolve() : server.once('exit', resolve));

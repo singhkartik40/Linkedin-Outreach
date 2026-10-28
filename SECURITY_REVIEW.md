@@ -2,6 +2,8 @@
 
 Reviewed the Node API, React dashboard, Chrome extension, Google Sheet writer and dependencies. Local fixes are applied and the app server has been restarted. The Apps Script source is fixed locally, but there is no configured live Sheet writer to redeploy.
 
+Version 0.5.1 removes funding-report and metro-only requirements from founder discovery. Founder pitches do not claim funding. The static-analysis counts below are from the v0.5.0 scan; functional tests have been updated for founders outside metros without funding evidence and direct job links.
+
 ## Results
 
 | Check | Result |
@@ -12,7 +14,7 @@ Reviewed the Node API, React dashboard, Chrome extension, Google Sheet writer an
 | Unit/API regression suite | 57 tests passed. |
 | Production build | Passed. |
 | Chrome dashboard smoke test | Passed on an isolated test server with fixtures. No real invitations or Sheet writes were performed. |
-| Extension integration smoke | Passed in Chromium with the actual unpacked helper: two cities × two job roles, 20 team contacts plus 10 funded metro founders in one scan, full note, and completion following a fixture success signal. |
+| Extension integration smoke | Passed in Chromium with the actual unpacked helper: two cities × two job roles, 20 team contacts plus 10 founders outside metros without funding reports, full note, and completion following a fixture success signal. |
 
 The dependency/static analysis completed on 28 October at 21:22 IST. The local scanner is not a SonarQube Server/Cloud analysis or quality-gate certification. SonarJS exposes only part of Sonar's analysis capabilities; see the [official SonarJS documentation](https://github.com/SonarSource/eslint-plugin-sonarjs/blob/master/README.md).
 

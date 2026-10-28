@@ -4,7 +4,7 @@ import { recentFundingFromArticles, findRecentFunding } from '../server/funding.
 import { buildOutreachMessage } from '../server/outreach-message.mjs';
 import { isIndianMetroLocation } from '../server/locations.mjs';
 
-test('founder funding requires a recent sourced report with a meaningful disclosed amount', () => {
+test('legacy funding utility parses reports independently of discovery eligibility', () => {
   const now = Date.parse('2026-10-26T00:00:00Z');
   const articles = [
     { title: 'Acme Design raises $4 million Series A', url: 'https://news.example/acme', seendate: '20261024T120000Z' },
@@ -17,7 +17,7 @@ test('founder funding requires a recent sourced report with a meaningful disclos
   assert.equal(result.size, 1);
 });
 
-test('founder funding lookup uses a fixed HTTPS endpoint and pitch is distinct from referral', async () => {
+test('legacy funding utility uses HTTPS; founder pitches work independently', async () => {
   const fetcher = async url => {
     assert.equal(url.hostname, 'api.gdeltproject.org');
     assert.equal(url.protocol, 'https:');

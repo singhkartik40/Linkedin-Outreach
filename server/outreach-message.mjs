@@ -4,13 +4,13 @@ export const portfolioUrl = 'https://karteek.work';
 export const resumeUrl = 'https://drive.google.com/file/d/16hilLHZ3_4nvYX56vPKkKpMFjUqpk1oN/view?usp=sharing';
 export const requiredPhrase = 'I believe I’d be a strong fit.';
 
-export function buildOutreachMessage({ name, company, jobTitle, headline = '', funding = null }) {
+export function buildOutreachMessage({ name, company, jobTitle, headline = '' }) {
   const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
   const first = clean(name).split(' ')[0];
-  if (/\b(?:co[ -]?)?founder\b/i.test(headline) && funding?.url) {
+  if (/\b(?:co[ -]?)?founder\b/i.test(headline)) {
     const links = `Portfolio: ${portfolioUrl} Resume: ${resumeUrl}`;
     for (const greeting of [`Hi ${first},`, 'Hi,']) {
-      for (const pitch of [`I saw ${clean(company)}'s recent funding and ${clean(jobTitle)} role. I design product/UX experiences. May I share a design pitch for your team?`, `I saw ${clean(company)}'s funding news and design opening. May I pitch how I could help your product team?`]) {
+      for (const pitch of [`I saw the ${clean(jobTitle)} opening at ${clean(company)}. I design product/UX experiences. May I share a design pitch for your team?`, `I saw ${clean(company)}'s design opening. May I pitch how I could help your product team?`, 'I design product/UX experiences. May I share a design pitch for your team?']) {
         const message = `${greeting} ${pitch} ${links}`;
         if (message.length <= outreachCharacterLimit) return message;
       }
@@ -44,4 +44,3 @@ export function refreshDraftMessages(contacts) {
     return { ...contact, message, messageVersions: [...(contact.messageVersions || []), { message: contact.message, replacedAt: new Date().toISOString() }] };
   });
 }
-

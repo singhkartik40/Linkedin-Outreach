@@ -1,164 +1,210 @@
 # Outreach Desk
 
-A local LinkedIn outreach dashboard: scan recent Product/UX design openings, find relevant employees and founders, prepare messages, review invitations, and record confirmed outreach in Google Sheets.
+Find people to contact about Product Designer and UX Designer jobs, write a message, and keep track of who you have contacted.
 
-Repository: [singhkartik40/Linkedin-Outreach](https://github.com/singhkartik40/Linkedin-Outreach)
+The app runs on your computer. Your code is saved in this [private GitHub repository](https://github.com/singhkartik40/Linkedin-Outreach).
 
-## Workflow
+## What happens when I click Find 20 new people?
 
-Every manual scan, Refresh people run, and automatic two-hour run searches both audiences:
+The app:
 
-1. Check Product Designer and UX Designer roles in the selected cities, using past-24-hours and full-time evidence.
-2. Exclude internships, contract, part-time, freelance, temporary and unrelated titles. If LinkedIn drops its full-time filter, verify each candidate job's details. Viewed/applied cards can use the active past-day filter; explicitly older visible ages are excluded.
-3. Find up to **2 designers and 2 HR/talent contacts per company**, targeting **20 new team contacts**.
-4. Also find up to **2 founders/co-founders per company**, with a separate target of up to **20 founders**. Reaching the team target does not stop founder searches.
-5. Import founders only when visibly based in an Indian metro and backed by a funding-news report of at least **US$2 million or ₹10 crore within 90 days**. Supported metros include Bengaluru/Bangalore, Mumbai, Delhi/NCR, Gurugram, Noida, Hyderabad, Pune, Chennai and Kolkata. News coverage is not exhaustive.
-6. Stream verified contacts into the table during discovery. Reject saved profiles and explicit former-company headlines. Keep job evidence and, for founders, the funding source.
-7. Prepare referral messages for employees and distinct design pitches for qualified founders, with the portfolio and résumé links intact.
+1. Looks for recent full-time design jobs in your chosen locations.
+2. Finds designers, HR/recruiters, and founders at those companies.
+3. Adds people to your list as the search runs.
+4. Writes a message with your portfolio and résumé links.
+5. Checks your tracker to help avoid contacting the same person twice.
 
-The Designers & HR and Founders & co-founders tabs filter saved results; either scan button searches both. Targets are maximum goals, not guaranteed counts. If funding lookup fails, team contacts remain saved and unverified founders are excluded with a warning.
+Each company can add up to **2 designers, 2 HR/recruiters, and 2 founders**. Each run aims for up to **20 designers/HR contacts plus 20 founders**. Some searches will find fewer people.
 
-## Requirements
+**Founders do not need funding news or a metro-city location.** The app still matches them to companies with relevant job openings and follows the job location rules. For India-based jobs, it looks for people based in India. Founder messages are a pitch; employee messages ask about a referral.
 
-- Node.js **24+** with npm; the app uses built-in SQLite.
-- Chrome signed in to LinkedIn, with the helper installed in that same profile.
-- Internet access for LinkedIn, funding news and Sheets.
-- Optional AI provider key for AI extraction/testing. Browser discovery and template-based message drafts do not require an AI request.
+The two tabs, **Designers & HR** and **Founders & co-founders**, show different parts of the same search. Every scan searches both groups.
 
-The service listens on **127.0.0.1:4318**. The extension expects this origin; changing `PORT` alone does not update the helper.
+## Open the app on this computer
 
-## First-time setup
+1. Double-click **Start Outreach Desk.cmd** in the project folder.
+2. Open [Outreach Desk](http://127.0.0.1:4318/) in Chrome.
+3. Make sure you are signed in to LinkedIn in the same Chrome profile.
+
+You can close Codex. The app does not need this chat to stay open.
+
+## Set it up on a new computer
+
+You need **Node.js 24 or newer** and **Google Chrome**.
+
+1. Download the project from GitHub and unzip it, or use the optional Git command below.
+2. Open a terminal in the project folder. On Windows, you can right-click inside the folder and choose **Open in Terminal**.
+3. Run these commands, one at a time:
 
 ```powershell
-git clone https://github.com/singhkartik40/Linkedin-Outreach.git
-cd Linkedin-Outreach
 npm ci
-Copy-Item .env.example .env
 npm run build
 npm start
 ```
 
-The private repository requires an authorized GitHub account. Open [Outreach Desk](http://127.0.0.1:4318/) in Chrome and leave the server running.
+4. Open [Outreach Desk](http://127.0.0.1:4318/) in Chrome.
+5. Install the helper using the steps below.
 
-### Chrome helper
+Keep the terminal running while using the app. Later, you can use **Start Outreach Desk.cmd** instead.
 
-1. Open `chrome://extensions` in the Chrome profile signed in to LinkedIn.
-2. Enable Developer mode and click **Load unpacked**.
-3. Select the repository's `chrome-extension` folder.
-4. Confirm **Outreach Desk LinkedIn Helper v0.5.0** is enabled and can access LinkedIn and the local dashboard.
-5. Refresh Outreach Desk in the same Chrome profile.
+<details>
+<summary>Optional: download using Git</summary>
 
-Windows shortcut: **Install Chrome Helper.cmd** opens the extension page and folder; it does not install automatically. The Codex in-app browser does not run this extension.
+Sign in with a GitHub account that can access the private repository, then run:
 
-After updating extension files, click **Reload** on the helper card, then refresh Outreach Desk. Old dashboard tabs lose their extension connection when the helper reloads.
+```powershell
+git clone https://github.com/singhkartik40/Linkedin-Outreach.git
+cd Linkedin-Outreach
+```
 
-## Daily use
+GitHub stores the project files. It does not run the app or your LinkedIn searches for you.
 
-1. In **Outreach**, choose locations and click **Find 20 new people**. All India searches nationally and across supported metros; custom cities are available.
-2. Keep the dashboard and scan tab open. Watch stage/progress and incoming rows. Founder funding verification can take longer.
-3. Review either audience tab. Open job/profile sources and verify the message, connection state and tracker status.
-4. Use search, company/status filters, sorting and CSV export. **Details & edit** saves message history; copy actions provide the message, profile link or full contact details.
-5. Click **Send outreach**. The helper opens the profile, checks its relationship controls, opens the invitation or supported composer, and fills the full message where an editor is available. Notes are capped at **290 characters**; LinkedIn may enforce a lower account-specific limit.
-6. Review LinkedIn's dialog and click its final **Send** yourself. Opening or filling a dialog does not count as delivery.
-7. A reliable visible success signal marks the contact done automatically. Otherwise, verify delivery and use **Mark done**. Completed contacts leave the active queue.
-8. With the Sheet writer configured, completion updates and verifies Master. A failed write leaves delivery confirmed locally; **Retry Sheet update** retries only the write.
+</details>
 
-**Refresh people** replaces both audiences' draft queue once, when the first batch arrives. Completed, skipped and deleted records are preserved. Contact/message-version deletion is recoverable from its deleted view.
+## Install or reload the Chrome helper
 
-This deployment is personalized for Kartik. Change portfolio/résumé links and message wording in `server/outreach-message.mjs` before using it for someone else. Workspace branding is in `src/main.tsx`. Shortening prose keeps URLs intact.
+The helper lets the app open LinkedIn, find people, and fill in a message.
 
-## Automatic scans and running without Codex
+1. In Chrome, enter `chrome://extensions` in the address bar.
+2. Turn on **Developer mode**.
+3. Click **Load unpacked**.
+4. Select the project's **chrome-extension** folder.
+5. Check that **Outreach Desk LinkedIn Helper v0.5.1** is enabled.
+6. Refresh the Outreach Desk page.
 
-Discovery runs every **two hours**, including designers, HR/talent and founders. Use **Pause auto-scan** / **Enable auto-scan** on Outreach. A shared lease prevents overlapping dashboard runs; manual scans reset the next interval. Missed intervals are not replayed in a burst.
+**Already installed?** Click the helper's **Reload** button, then refresh Outreach Desk. You do not need to remove and install it again.
 
-Discovery requires the computer awake, the local server running, Chrome signed in to LinkedIn, the helper enabled and Outreach Desk open in a Chrome tab. **Codex can be closed.** Discovery stops when Chrome/dashboard closes or the computer shuts down. Running the server alone does not run a browser scan.
+**Install Chrome Helper.cmd** opens the extension page and folder for you. Use the Chrome profile where LinkedIn is signed in. This helper does not work inside Codex's built-in browser.
 
-### Windows shortcuts/startup
+## Find people and send outreach
 
-Double-click **Start Outreach Desk.cmd** to start the server hidden and open the app. To start the service at Windows sign-in, run from the repository:
+1. Open **Outreach** and choose the cities you want, or **All India**.
+2. Click **Find 20 new people**. Leave the LinkedIn search tab and dashboard open.
+3. Watch the progress bar. People appear in the table while the search continues.
+4. Read the message and check the person's profile. Use **Copy message** or **Details & edit** if needed.
+5. Click **Send outreach**. The helper opens LinkedIn and tries to open the connection/message box and fill the message.
+6. Review it and click **Send on LinkedIn yourself**.
+7. When LinkedIn confirms the send, the app marks the person done. If it cannot see that confirmation, check LinkedIn yourself and use **Mark done**.
+
+Messages are at most 290 characters and keep both links. LinkedIn may allow fewer characters or restrict notes for some accounts.
+
+In **Job research**, each row has **Open on LinkedIn** to open the original job in a new tab. Click the job title to see the app's saved details instead.
+
+**Refresh people** replaces unfinished drafts with a fresh search across both groups. Completed, skipped and deleted records are kept. Deleted contacts can be restored. You can also search the table, filter by company, copy details, and download a CSV file.
+
+## Let it search every two hours
+
+Automatic scans look for designers, HR/recruiters, and founders. Use **Pause auto-scan** or **Enable auto-scan** to control them.
+
+For this to work, keep:
+
+- Your computer on and awake.
+- The app's local service running.
+- Chrome open, signed in to LinkedIn, with the helper enabled.
+- Outreach Desk open in a Chrome tab.
+
+Codex can be closed. Searches stop if the computer shuts down or the dashboard/Chrome closes. A missed search does not trigger a burst of catch-up searches.
+
+<details>
+<summary>Optional: start the app's service when Windows starts</summary>
+
+Run this once from a terminal in the project folder:
 
 ```powershell
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-outreach-startup.ps1
 ```
 
-This creates a Windows scheduled task named **Outreach Desk**. Open the Chrome dashboard afterward. Disable/remove that task in Windows Task Scheduler to stop startup behavior.
+It creates a Windows task named **Outreach Desk**. You still need to open the dashboard in Chrome. To turn this off, disable the task in Windows Task Scheduler.
 
-For a server running in a terminal, Ctrl+C stops it; `npm start` restarts it. A launcher-started server runs hidden: identify its Node process by the `server/index.mjs` command line in Task Manager before stopping it. Avoid stopping unrelated Node processes.
+</details>
 
-## AI provider setup
+## Add an AI key — optional
 
-In **Settings**, choose a provider, paste its key, save, and optionally use **Test saved connection**. Named providers choose a default model; no model ID is required.
+Open **Settings**, choose your provider, paste its key, and click **Save provider**. Then use **Test saved connection** to check it.
 
-| Provider | Persistent environment variable |
-| --- | --- |
-| OpenAI | `OPENAI_API_KEY` |
-| Anthropic | `ANTHROPIC_API_KEY` |
-| Gemini | `GEMINI_API_KEY` |
-| Groq | `GROQ_API_KEY` |
-| OpenRouter | `OPENROUTER_API_KEY` |
-| NVIDIA NIM | `NVIDIA_API_KEY` |
-| Chutes AI | `CHUTES_API_KEY` |
-| OpenAI-compatible/local server | `COMPATIBLE_API_KEY` |
+Supported providers include NVIDIA, Gemini, OpenAI, Anthropic, Groq, OpenRouter, and Chutes. For these providers, the app chooses the model for you.
 
-An unlisted compatible service needs its API base URL and exact model ID; an arbitrary key does not identify a service. Custom endpoints require HTTPS except localhost model servers, which may omit a key. Native-provider endpoints are fixed.
+For a different OpenAI-compatible service, enter its website's API address and model name as well. A key from one provider will not work with every other provider.
 
-Settings keys stay in server memory and clear on restart. For persistence, edit local `.env` from `.env.example`, then restart. Keys are not returned by the state API or saved in browser storage/SQLite. `.env` is plaintext and must remain private.
+You can search LinkedIn and create standard message drafts without an AI key. AI extraction and connection tests may use the provider's credits.
 
-Provider tests and AI extraction send requests to the selected provider and may consume credits/quota. The repository includes no keys. Free quotas and model availability are provider-controlled.
+Keys entered in Settings are forgotten when the app's service restarts. To keep a key between restarts, copy `.env.example` to a file named `.env`, fill in your provider's key, and restart the service. Keep that file private; it is not uploaded to GitHub. The example file lists the supported key names.
 
-## Google Sheets
+## Connect the Google Sheet
 
-The default tracker is configured in `server/index.mjs`:
+The app uses [Kartik's outreach tracker](https://docs.google.com/spreadsheets/d/1M61OSpGnYkTYEbZbsaABS4j7QsxaHRV9L24PXniwIIY/edit).
 
-`https://docs.google.com/spreadsheets/d/1M61OSpGnYkTYEbZbsaABS4j7QsxaHRV9L24PXniwIIY/edit`
+To read it, keep the sheet shared as **Anyone with the link → Viewer**, then click **Tracker → Refresh tracker**. This checks previous contacts before outreach. No Google login setup is needed for these public reads.
 
-### Reads and duplicate checks
+A public sheet can be read, but that does **not** let the app change it. To update the sheet after Mark done, complete the one-time setup below.
 
-Keep the sheet shared as **Anyone with the link · Viewer**, then choose **Tracker → Refresh tracker**. Public CSV reads require no OAuth. Master history and required headers are checked; normalized names/profile URLs prevent duplicate outreach. The table shows the cached refresh time. Public readability does not grant write access.
+<details>
+<summary>One-time setup: let Mark done update the Sheet</summary>
 
-Enable **Automation → Refresh the tracker automatically** for five-hour reads while the server runs. This is separate from two-hour people discovery.
-
-### Writes after confirmed delivery
-
-1. In the spreadsheet, open **Extensions → Apps Script**.
-2. Paste [`sheets/OutreachWriter.gs`](sheets/OutreachWriter.gs) into the bound project.
-3. Generate a long random token locally, for example:
+1. In the Sheet, choose **Extensions → Apps Script**.
+2. Paste the contents of [`sheets/OutreachWriter.gs`](sheets/OutreachWriter.gs) into the script.
+3. Create a long random secret token. You can generate one locally with:
 
 ```powershell
 node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
 ```
 
-4. Set Script property **OUTREACH_WRITE_TOKEN** to that token.
-5. Deploy a **Web app**, execute as yourself, with **Anyone** access. The public endpoint relies on the secret token; keep it private.
-6. Save the deployment's `/exec` URL and token in **Outreach Desk → Tracker**. This session configuration clears on restart.
-7. For persistence, set `SHEET_WRITE_WEB_APP_URL` and `SHEET_WRITE_TOKEN` in `.env`, then restart.
+4. In Apps Script settings, add a Script property named **OUTREACH_WRITE_TOKEN** with that value.
+5. Deploy it as a **Web app**, running as yourself, with access set to **Anyone**. Keep the token secret: it protects this public web address.
+6. In the app's **Tracker** page, save the deployment's `/exec` address and the same token.
 
-The writer matches LinkedIn profiles, changes only Status/Sent on (IST) on an existing row, or appends a missing contact. It reads back identity/status before reporting success. Ambiguous identities stop the write. Tokens and upstream request bodies are excluded from UI errors.
+To keep these settings after restarting the service, add `SHEET_WRITE_WEB_APP_URL` and `SHEET_WRITE_TOKEN` to your private `.env` file.
 
-## Updating from GitHub
+The writer updates the matching contact's status/date, or adds a new row if needed, then checks the result. If it fails, the app keeps delivery recorded locally. Use **Retry Sheet update**; do not resend the LinkedIn message.
 
-For an authenticated cloned checkout:
+</details>
+
+Tracker refreshes can run every five hours if enabled under **Automation**. This is separate from the two-hour people search.
+
+## Update the app
+
+After getting the latest files from GitHub:
+
+1. Run `npm ci`, then `npm run build`.
+2. Restart the app's service.
+3. Reload the Chrome helper.
+4. Refresh the dashboard.
+
+If you used Git to download the project, `git pull --ff-only` gets the latest files first. If you downloaded a ZIP, keep your private `.env` and `.data` folder when replacing project files.
+
+If the service is running in a terminal, press Ctrl+C to stop it, then run `npm start`. A service started by the Windows launcher runs in the background; identify the Node process with `server/index.mjs` in Task Manager before stopping it. Avoid stopping other Node apps.
+
+## Common problems
+
+| Problem | What to do |
+| --- | --- |
+| The app will not open | Start it with **Start Outreach Desk.cmd**. Check that no other app is using port 4318. |
+| Helper disconnected or needs reloading | Reload it at `chrome://extensions`, then refresh Outreach Desk. |
+| LinkedIn opens but the search stops | Check sign-in, helper access to LinkedIn, and whether the search tab is waiting for something. Leave it open. |
+| Fewer than 20 people | The app skips people already saved and needs matching jobs/company information. Try another location or scan later. |
+| No note box | LinkedIn may restrict notes or already have an invitation pending. Use the copied message/manual steps. |
+| Send outreach is disabled | Refresh the tracker and check whether the person is already listed or completed. |
+| Sheet update pending | Check the Sheet writer setup and click **Retry Sheet update**. |
+| A change does not appear | Rebuild, restart the service, reload the helper, and refresh the dashboard. |
+
+## What stays private?
+
+Your API keys, saved contact history, logs and screenshots stay out of GitHub. Back up `.env` and `.data` privately: downloading the project again does not restore those files.
+
+This is a personal app for your own computer, not a public website. LinkedIn can limit automated activity; the helper cannot bypass its account limits or login checks.
+
+The portfolio/résumé links and message wording are in `server/outreach-message.mjs`. Change them before using the app for someone else.
+
+<details>
+<summary>For developers: tests and security checks</summary>
 
 ```powershell
-git pull --ff-only
-npm ci
-npm run build
-```
-
-Restart the server after backend/environment changes. Reload the helper after extension changes, then refresh the dashboard. The dashboard checks the expected helper version before scanning.
-
-## Development and tests
-
-```powershell
-npm ci
 npm test
 npm run build
-npm start
+npm run security:scan
 ```
 
-For frontend development, run `npm start` and `npm run dev` separately. Vite serves `http://127.0.0.1:5173`; use the built dashboard on **4318** for extension discovery.
-
-Browser tests need Playwright installed locally or supplied via `PLAYWRIGHT_PACKAGE`:
+Browser tests use Playwright. Install it locally, or supply its location through `PLAYWRIGHT_PACKAGE`. `test:ui` uses Chrome; `test:extension` uses an isolated Chromium profile with fake LinkedIn pages and does not contact real people.
 
 ```powershell
 npm install --no-save --package-lock=false playwright
@@ -167,45 +213,8 @@ npm run test:ui
 npm run test:extension
 ```
 
-`test:ui` uses installed Chrome and a simulated helper. `test:extension` loads the real helper in isolated Chromium with mocked LinkedIn/funding pages. Set `CHROME_EXECUTABLE` to Playwright Chromium if necessary; ordinary Chrome can disallow command-line extension loading. Screenshots stay in `test-results/`. Test databases are temporary; tests do not send invitations through your real LinkedIn account.
+If needed, set `CHROME_EXECUTABLE` to the Playwright Chromium executable. For frontend work, run `npm start` and `npm run dev` separately. The development page uses port 5173, but extension scans need the built dashboard on port 4318.
 
-Coverage includes recency, role exclusions, audience quotas, founders in every run, funding qualification, live imports/deduplication, receipts, tracker readback, credential redaction and local API protections.
+Security reports go into `security-reports/`. Static warnings are documented in [SECURITY_REVIEW.md](SECURITY_REVIEW.md); a nonzero security-scan exit is not the same as a confirmed vulnerability. This is local analysis, not a SonarQube upload.
 
-## Troubleshooting
-
-| Symptom | Check |
-| --- | --- |
-| Dashboard unavailable | Start the service; inspect `server.log`/`server-error.log`; confirm port 4318 and a production build. |
-| Helper disconnected/context invalidated | Reload the helper, then refresh the dashboard in the same Chrome profile. |
-| Scan tab opens but stalls | Check sign-in, visible page, helper site access/version; keep the scan tab open. |
-| No jobs | Check cities and past-day/full-time evidence. Diagnostics distinguish unreadable cards from rejected ones. |
-| No founders | Candidates need metro location, recent qualifying funding and an unsaved profile. News coverage is not exhaustive. |
-| Funding warning | Team results stay saved; unverified founders are excluded. Retry later. |
-| No invitation note editor | Account restrictions, pending invitations or UI variants can prevent it. Use the copied message/manual flow. The helper cannot create an editor LinkedIn does not offer. |
-| Tracker blocks outreach | Refresh the tracker and resolve duplicate/history checks. |
-| Sheet update pending | Check writer URL/token/deployment, then retry the Sheet write without resending. |
-| Changes invisible | Rebuild, restart backend for server changes, reload helper for extension changes, and refresh the dashboard. |
-
-## Security and local data
-
-The service binds to loopback with Host/Origin checks and a content-security policy. Do not expose it publicly without authentication and a deployment security review. LinkedIn may restrict automated account activity; the helper does not bypass login, account limits or CAPTCHAs and cannot guarantee account immunity.
-
-```powershell
-npm run security:scan
-```
-
-This runs local SonarJS/ESLint security rules, a limited credential-pattern check and npm audit. Reports stay in `security-reports/`. Static findings are review items, not confirmed vulnerability counts; the command returns nonzero while lint findings remain. It does not upload code to SonarQube. See [`SECURITY_REVIEW.md`](SECURITY_REVIEW.md).
-
-Git excludes `.env`, `.data/` databases, dependencies, builds, logs, screenshots, security reports, private keys and the original personal PRD. Back up `.data/` and `.env` privately: cloning GitHub does not restore local history or credentials. Publishing source does not host the local server, browser session or scheduled scans.
-
-## Layout
-
-```text
-src/                 React dashboard and outreach table
-server/              API, SQLite, providers, rules, funding and tracker
-chrome-extension/    Manifest V3 jobs/people scanning and invitation helper
-sheets/              Google Apps Script writer
-scripts/             Windows launchers and security checks
-tests/               Unit/API/browser tests and isolated fixtures
-public/              Static assets
-```
+</details>

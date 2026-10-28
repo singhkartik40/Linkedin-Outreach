@@ -71,6 +71,14 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     const writerState = await (await fetch(`${base}/api/state`)).text();
     assert.equal(JSON.parse(writerState).google.writeConfigured, true);
     assert.ok(!writerState.includes('test-token-with-at-least-thirty-two-characters'));
+    const founder = { ...people[0], name: 'Founder Example', headline: 'Cofounder at Fresh Co', location: 'Indore, India', profileUrl: 'https://www.linkedin.com/in/founder-example/' };
+    const founderImport = await (await post('/people/import', { people: [founder], jobs: recentJobs, mode: 'all' })).json();
+    assert.equal(founderImport.added, 1, 'a founder outside the metro list needs no funding report');
+    assert.equal(founderImport.addedFounders, 1);
+    const savedFounder = (await (await fetch(`${base}/api/state`)).json()).contacts.find(contact => contact.name === founder.name);
+    assert.equal(savedFounder.funding, null);
+    assert.match(savedFounder.message, /pitch/);
+    assert.doesNotMatch(savedFounder.message, /funding|refer me/);
   } finally {
     child.kill();
     await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));

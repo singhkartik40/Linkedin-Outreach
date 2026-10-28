@@ -33,7 +33,6 @@ function matchesCity(location, cities = ['India'], country = '', searchLocation 
 const jobSearches = searchesFor(['India']);
 const rolesFor = scan => scan.mode === 'founders' ? ['founder'] : scan.mode === 'all' ? ['designer', 'talent', 'founder'] : ['designer', 'talent'];
 const audienceFull = (scan, role) => scan.results.filter(person => (person.contactRole === 'founder') === (role === 'founder')).length >= scan.limit;
-const metroLocation = value => /\b(?:bengaluru|bangalore|mumbai|bombay|delhi|noida|gurugram|gurgaon|hyderabad|pune|chennai|kolkata)\b/i.test(value || '');
 function advancePeopleStage(scan) {
   const roles = rolesFor(scan);
   let index = roles.indexOf(scan.role) + 1;
@@ -244,7 +243,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         if (!matchesContactLocation(job.country === 'India' ? `${job.location}, India` : job.location, person.location)) { peopleScan.rejections.location += 1; continue; }
         const role = contactRole(person.headline);
         if (role !== (peopleScan.role || 'designer')) { peopleScan.rejections.role += 1; continue; }
-        if (audienceFull(peopleScan, role) || (role === 'founder' && !metroLocation(person.location))) continue;
+        if (audienceFull(peopleScan, role)) continue;
         if (peopleScan.results.filter(item => item.company.toLowerCase() === company.toLowerCase() && item.contactRole === role).length >= 2) continue;
         peopleScan.results.push({ ...person, company, contactRole: role, jobUrl: job.url });
         seen.add(key);

@@ -206,7 +206,7 @@ test('founder scan excludes other roles, caps each company at two and completes 
  assert.equal(state.peopleScan,undefined);
 });
 
-test('a combined scan still searches metro founders after reaching the team target', async () => {
+test('a combined scan searches founders outside metros after reaching the team target', async () => {
   let listener;
   const team = Array.from({ length: 20 }, (_, index) => ({ name: `Saved team ${index}`, contactRole: 'designer', company: 'Earlier company', profileUrl: `https://www.linkedin.com/in/earlier-${index}/`, jobUrl: 'https://www.linkedin.com/jobs/view/123/' }));
   const state = { peopleScan: { scanId: 'all', tabId: 42, phase: 'people', mode: 'all', role: 'talent', companies: ['Acme'], companyIndex: 0, jobs: [{ url: 'https://www.linkedin.com/jobs/view/123/', company: 'Acme', location: 'India' }], results: team, excludedProfiles: [], limit: 20, cities: ['India'] } };
@@ -217,10 +217,11 @@ test('a combined scan still searches metro founders after reaching the team targ
   await receive({ people: [] });
   assert.equal(state.peopleScan.role, 'founder');
   assert.match(navigation.at(-1), /founder/);
-  const people = ['Bengaluru, India', 'Mumbai, India', 'Indore, India'].map((location, index) => ({ name: `Founder ${index}`, headline: 'Founder at Acme', location, profileUrl: `https://www.linkedin.com/in/acme-founder-${index}/` }));
+  const people = ['Indore, India', 'Jaipur, India', 'Bengaluru, India'].map((location, index) => ({ name: `Founder ${index}`, headline: 'Founder at Acme', location, profileUrl: `https://www.linkedin.com/in/acme-founder-${index}/` }));
   await receive({ people });
   const result = messages.find(message => message.type === 'people-scan-results').payload;
   assert.equal(result.people.length, 22);
   assert.equal(result.people.filter(person => person.contactRole === 'founder').length, 2);
+  assert.equal(result.people.find(person => person.contactRole === 'founder').location, 'Indore, India');
   assert.equal(state.peopleScan, undefined);
 });

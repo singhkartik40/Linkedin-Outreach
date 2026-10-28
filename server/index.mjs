@@ -11,8 +11,7 @@ import { createGoogle } from './google.mjs';
 import { createSheetWriter } from './sheet-writer.mjs';
 import { buildOutreachMessage, refreshDraftMessages } from './outreach-message.mjs';
 import { changeContact, saveContactDraft } from './contact-actions.mjs';
-import { matchesCity, matchesContactToJobLocation, isIndianMetroLocation } from './locations.mjs';
-import { findRecentFunding } from './funding.mjs';
+import { matchesCity, matchesContactToJobLocation } from './locations.mjs';
 import { isLatestJob } from './recent-jobs.mjs';
 import { canonicalUrl, validateExtraction, evaluateJob, sendingCapability, isDuplicate, profileSlug, trackerConfirmsDelivery } from './domain.mjs';
 import { providerDefaults, validateProvider, generate, parseJson, extractionPrompt } from './providers.mjs';
@@ -30,16 +29,6 @@ let sheetWriter = createSheetWriter();
 const defaultSpreadsheetId = '1M61OSpGnYkTYEbZbsaABS4j7QsxaHRV9L24PXniwIIY';
 if (!store.get('spreadsheetId', '')) store.set('spreadsheetId', defaultSpreadsheetId);
 const sessionKeys = new Map();
-const fundingCache = new Map();
-async function fundingFor(companies) {
-  const names = [...new Set(companies.map(value => String(value || '').trim()).filter(Boolean))];
-  const missing = names.filter(name => !fundingCache.has(name) || fundingCache.get(name).expiresAt < Date.now());
-  if (missing.length) {
-    const found = await findRecentFunding(missing);
-    for (const name of missing) fundingCache.set(name, { value: found.get(name) || null, expiresAt: Date.now() + 15 * 60 * 1000 });
-  }
-  return new Map(names.filter(name => fundingCache.get(name)?.value).map(name => [name, fundingCache.get(name).value]));
-}
 const identity = config => `${config.provider}:${config.baseUrl}`;
 const keyFor = config => sessionKeys.get(identity(config)) ?? process.env[providerDefaults[config.provider].env] ?? '';
 const allowedOrigins = new Set([`http://127.0.0.1:${port}`, 'http://127.0.0.1:5173']);
@@ -247,30 +236,21 @@ const server = http.createServer(async (req, res) => {
       const jobs = store.jobs().filter(job => freshUrls.has(job.url)), current = store.get('contacts', []);
       const founderMode = input.mode === 'founders';
       const mixedMode = input.mode === 'all';
-      const founderCompanies = people.filter(person => contactRole(person.headline) === 'founder').map(person => person.company);
-      const warnings = [];
-      let funding = new Map();
-      if (founderCompanies.length && (founderMode || mixedMode)) {
-        try { funding = await fundingFor(founderCompanies); }
-        catch (error) { if (!mixedMode) throw error; warnings.push('Founder funding could not be checked. Team contacts were saved; unverified founder candidates were excluded.'); }
-      }
       const preserved = input.replace ? current.filter(contact => (!mixedMode && (contactRole(contact.headline) === 'founder') !== founderMode) || contact.deletedAt || ['Sent', 'Send confirmed', 'Skipped'].includes(contact.status)) : current;
       const byProfile = new Map(preserved.map(contact => [profileSlug(contact.profileUrl), contact]));
       let added = 0;
       const accepted = [];
       for (const person of people) {
         if (explicitlyFormerEmployee(person)) continue;
-        const fundingSource = funding.get(String(person.company || '').trim()) || null;
         const isFounder = contactRole(person.headline) === 'founder';
-        if (isFounder && (!fundingSource || !isIndianMetroLocation(person.location))) continue;
-        const contact = contactFromDiscovery({ ...person, funding: fundingSource }, jobs), slug = profileSlug(contact.profileUrl);
+        const contact = contactFromDiscovery({ ...person, funding: null }, jobs), slug = profileSlug(contact.profileUrl);
         if ((!mixedMode && isFounder !== founderMode) || !slug || byProfile.has(slug) || !matchesContactToJobLocation(contact.jobLocation, contact.location) || !withinCompanyQuota(contact, accepted)) continue;
         accepted.push(contact);
         byProfile.set(slug, contact); added += 1;
       }
       store.set('contacts', [...byProfile.values()]);
       store.event('contact-research', `${input.replace ? 'Refreshed' : 'Found'} ${added} LinkedIn people and prepared outreach drafts.`);
-      return reply(res, 200, { saved: true, added, addedFounders: accepted.filter(contact => contact.contactRole === 'founder').length, total: byProfile.size, warnings });
+      return reply(res, 200, { saved: true, added, addedFounders: accepted.filter(contact => contact.contactRole === 'founder').length, total: byProfile.size });
     }
     if (url.pathname === '/api/tracker/configure' && req.method === 'POST') {
       const input = await body(req), value = String(input.spreadsheetId || '').trim();

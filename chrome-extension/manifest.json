@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Outreach Desk LinkedIn Helper",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Prepares LinkedIn connection dialogs, fills the full outreach message, and copies the full outreach message.",
   "permissions": [
     "storage",

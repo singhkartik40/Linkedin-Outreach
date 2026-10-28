@@ -16,12 +16,13 @@ test('full invitation includes intact portfolio and resume links within 290 char
   }
 });
 
-test('founders receive a consideration request', () => {
+test('founders receive a pitch without needing funding evidence', () => {
   for (const headline of ['Co-Founder', 'Cofounder', 'Founder']) {
     const input = { name: 'Asha', company: 'Acme', jobTitle: 'UX Designer', headline };
     const message = buildOutreachMessage(input);
-    assert.ok(message.includes('Would you consider me?'));
+    assert.match(message, /pitch/);
     assert.ok(!message.includes('refer me'));
+    assert.doesNotMatch(message, /funding|raised/);
     const pitch = buildOutreachMessage({ ...input, funding: { url: 'https://example.com/funding' } });
     assert.match(pitch, /pitch/);
     assert.ok(pitch.length <= 290);
@@ -38,4 +39,3 @@ test('draft upgrade preserves old messages and leaves completed and skipped reco
   assert.equal(result[3], skipped);
   assert.deepEqual(refreshDraftMessages(result), result);
 });
-

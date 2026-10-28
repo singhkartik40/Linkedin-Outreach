@@ -1,31 +1,29 @@
-# Outreach Desk LinkedIn Helper — v0.5.0
+# Chrome helper — v0.5.1
 
-Connects `http://127.0.0.1:4318/` to the visible, signed-in LinkedIn Chrome session.
+This helper lets Outreach Desk open LinkedIn, find people, and fill outreach messages in your signed-in Chrome profile.
 
-## Install/update
+## Install it
 
-1. Open `chrome://extensions` in the Chrome profile signed in to LinkedIn.
-2. Enable Developer mode and choose **Load unpacked**.
-3. Select this `chrome-extension` folder.
-4. Confirm the helper is enabled with access to LinkedIn and the local dashboard.
-5. Refresh Outreach Desk in the same profile.
+1. Open `chrome://extensions` in Chrome.
+2. Turn on **Developer mode** and click **Load unpacked**.
+3. Select this **chrome-extension** folder.
+4. Make sure the helper is enabled and can access LinkedIn and `http://127.0.0.1:4318/`.
+5. Refresh Outreach Desk in the same Chrome profile.
 
-For updates, click **Reload**, then refresh the dashboard. Helper/dashboard version: **0.5.0**. The Codex in-app browser does not run this extension.
+Already installed? Click **Reload**, then refresh the dashboard. Check that the helper shows **0.5.1**. The helper does not work inside Codex's built-in browser.
 
-## Discovery
+## How it works
 
-Every manual scan, Refresh people run and automatic two-hour run checks recent full-time Product/UX design jobs, then searches designers, HR/talent and founders. The team target of 20 is separate from the founder target, so reaching it does not stop founder stages. Per company: at most 2 designers, 2 HR/talent contacts and 2 founder candidates. Founders must show an Indian metro location; the server also requires qualifying recent funding before importing them.
+Every scan looks for recent full-time design jobs, then finds designers, HR/recruiters, and founders at those companies. Founders do not need funding news or a metro-city location. The usual job/company checks, location rules, duplicate checks and two-founders-per-company limit still apply.
 
-Batches stream into the dashboard as they are verified. Audience tabs filter saved results; both audiences are searched in every run. Leave the dashboard/scan tab open and the server running. Saved profiles are excluded. Reloading the helper interrupts a running scan.
+People appear in the dashboard as they are found. Keep the dashboard and LinkedIn search tab open, with the local app service running. The two audience tabs show different results from the same search.
 
-The parser supports modern/legacy cards, redirects with/without trailing slashes, rendering transitions, viewed/applied cards with hidden ages, and job-detail employment verification when LinkedIn drops Full-time. Per-search diagnostics remain in extension storage as `lastScanDiagnostics`.
+## Sending a message
 
-## Outreach
+Click **Send outreach** to open the person's profile and prepare the connection/message box where LinkedIn allows it. Review the message and click LinkedIn's final **Send** button yourself.
 
-Send outreach opens the profile, checks relationship controls and prepares an invitation/message editor where available. The full note is filled; an invitation-page fallback handles Connect buttons that fail to expose a dialog. The message stays copyable in Outreach Desk.
+The app marks the matching person done when it can see LinkedIn confirm the send. Otherwise, check delivery yourself and use **Mark done**. Just opening a dialog does not mean a message was sent.
 
-Review and click LinkedIn's final **Send** yourself. A reliable success signal marks the matching prepared contact done. Otherwise, verify delivery before using Mark done. Opening a dialog is not delivery. Sheet writes require the separate writer described in the [main README](../README.md).
+If LinkedIn does not offer a note field, the message remains available to copy in Outreach Desk. The helper cannot bypass account limits, pending invitations, or sign-in checks.
 
-Requests are accepted only from the local dashboard origin. Pending outreach expires after 15 minutes. The helper cannot bypass sign-in, account limits, pending invitations or missing note editors.
-
-See [README.md](../README.md) for full setup, provider keys, startup, tracker, tests and troubleshooting.
+See the [main README](../README.md) for app setup, API keys, the Google Sheet, automatic scans and troubleshooting.
