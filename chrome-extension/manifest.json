@@ -1,0 +1,69 @@
+{
+  "manifest_version": 3,
+  "name": "Outreach Desk LinkedIn Helper",
+  "version": "0.5.0",
+  "description": "Prepares LinkedIn connection dialogs, fills the full outreach message, and copies the full outreach message.",
+  "permissions": [
+    "storage",
+    "tabs",
+    "scripting",
+    "clipboardWrite"
+  ],
+  "host_permissions": [
+    "http://127.0.0.1:4318/*",
+    "https://www.linkedin.com/*"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "http://127.0.0.1:4318/*"
+      ],
+      "js": [
+        "bridge.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/in/*"
+      ],
+      "js": [
+        "linkedin.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/preload/custom-invite/*"
+      ],
+      "js": [
+        "invite.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/jobs/search*"
+      ],
+      "js": [
+        "jobs.js"
+      ],
+      "run_at": "document_start"
+    },
+    {
+      "matches": [
+        "https://www.linkedin.com/search/results/people/*"
+      ],
+      "js": [
+        "search.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_title": "Outreach Desk LinkedIn Helper"
+  }
+}
