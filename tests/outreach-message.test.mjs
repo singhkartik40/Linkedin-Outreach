@@ -17,9 +17,15 @@ test('full invitation includes intact portfolio and resume links within 290 char
 });
 
 test('founders receive a consideration request', () => {
-  const message = buildOutreachMessage({ name: 'Asha', company: 'Acme', jobTitle: 'UX Designer', headline: 'Co-Founder' });
-  assert.ok(message.includes('Would you consider me?'));
-  assert.ok(!message.includes('refer me'));
+  for (const headline of ['Co-Founder', 'Cofounder', 'Founder']) {
+    const input = { name: 'Asha', company: 'Acme', jobTitle: 'UX Designer', headline };
+    const message = buildOutreachMessage(input);
+    assert.ok(message.includes('Would you consider me?'));
+    assert.ok(!message.includes('refer me'));
+    const pitch = buildOutreachMessage({ ...input, funding: { url: 'https://example.com/funding' } });
+    assert.match(pitch, /pitch/);
+    assert.ok(pitch.length <= 290);
+  }
 });
 
 test('draft upgrade preserves old messages and leaves completed and skipped records untouched', () => {
@@ -32,3 +38,4 @@ test('draft upgrade preserves old messages and leaves completed and skipped reco
   assert.equal(result[3], skipped);
   assert.deepEqual(refreshDraftMessages(result), result);
 });
+
