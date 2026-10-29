@@ -8,7 +8,7 @@ export function createSheetWriter({ url = process.env.SHEET_WRITE_WEB_APP_URL, t
   return {
     configured,
     async markDone(contact, spreadsheetId) {
-      if (!configured()) throw new Error('Automatic Sheet updates are not configured. Add the Apps Script URL and write token in .env, then restart Outreach Desk.');
+      if (!configured()) throw new Error('Automatic Sheet updates are not configured. Open Tracker → Automatic Master updates and complete the one-time setup. Your send is saved locally; do not send it again.');
       const slug = profileSlug(contact.profileUrl);
       if (!slug) throw new Error('The contact needs a valid LinkedIn profile before updating the Sheet.');
       const payload = {

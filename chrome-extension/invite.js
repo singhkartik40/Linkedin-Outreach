@@ -21,9 +21,6 @@ function banner(message, error = false) {
   element.style.cssText = `position:fixed;top:16px;right:16px;z-index:2147483647;max-width:360px;padding:14px 16px;border-radius:10px;background:${error ? '#7f1d1d' : '#0f3d68'};color:white;font:14px/1.45 system-ui;box-shadow:0 8px 28px rgba(0,0,0,.28)`;
   document.documentElement.appendChild(element);
 }
-function confirmedByLinkedIn(previous) {
-  return [...document.querySelectorAll('[role="alert"], [role="status"], .artdeco-toast-item')].some(element => !previous.has(element) && /(?:invitation|connection request) (?:was |has been )?sent/i.test(clean(element.textContent)));
-}
 function editorValue(editor) { return editor instanceof HTMLTextAreaElement ? editor.value : clean(editor.innerText); }
 function fillEditor(editor, note) {
   if (editor instanceof HTMLTextAreaElement) {
@@ -35,27 +32,8 @@ function fillEditor(editor, note) {
   editor.dispatchEvent(new Event('change', { bubbles: true }));
   editor.focus();
 }
-function watchUserSend(editor, note) {
-  let watching = false;
-  document.addEventListener('click', async event => {
-    const button = event.target?.closest?.('button');
-    if (watching || !button || clean(button.textContent) !== 'Send' || editorValue(editor) !== note || !visible(editor)) return;
-    watching = true;
-    const previous = new Set(document.querySelectorAll('[role="alert"], [role="status"], .artdeco-toast-item'));
-    const attempt = await chrome.runtime.sendMessage({ type: 'outreach-send-attempt' }).catch(() => null);
-    if (!attempt?.ok) return;
-    let checks = 0;
-    const timer = setInterval(async () => {
-      if (confirmedByLinkedIn(previous)) {
-        clearInterval(timer);
-        const result = await chrome.runtime.sendMessage({ type: 'outreach-delivered' }).catch(() => null);
-        if (result?.ok) banner('LinkedIn confirmed the invitation. Outreach Desk is marking this contact done.');
-      } else if (++checks >= 30) {
-        clearInterval(timer);
-        banner('LinkedIn did not show a send confirmation. Check the invitation and use Mark done in Outreach Desk if it was sent.', true);
-      }
-    }, 500);
-  }, true);
+function watchUserSend(editor) {
+  globalThis.outreachWatchSend({editor,kind:'invitation',onStatus:banner});
 }
 let running = false;
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
@@ -72,17 +50,17 @@ async function run() {
     let editor = noteEditor();
     if (!editor) {
       const button = await waitFor(addNoteButton);
-      if (!button) throw new Error('LinkedIn did not show Add a note for this invitation.');
+      if (!button) { watchUserSend(null); throw new Error('LinkedIn did not show Add a note. Sending without a note will still be tracked when LinkedIn confirms it.'); }
       button.click();
       editor = await waitFor(noteEditor);
     }
-    if (!editor) throw new Error('LinkedIn did not open the invitation note editor.');
+    if (!editor) { watchUserSend(null); throw new Error('LinkedIn did not open the invitation note editor.'); }
+    watchUserSend(editor);
     const note = pendingOutreach.message;
     const maximum = Number(editor.getAttribute('maxlength')) || 300;
     if (note.length > maximum) throw new Error(`The note exceeds LinkedIn's ${maximum}-character limit.`);
     fillEditor(editor, note);
     if (editorValue(editor) !== note) throw new Error('LinkedIn did not retain the note.');
-    watchUserSend(editor, note);
     await chrome.storage.local.remove('pendingOutreach');
     banner('Full outreach message filled. Review it and click LinkedIn Send yourself. The full message remains in Outreach Desk.');
   } catch (error) { banner(error.message || 'Could not prepare the invitation note.', true); }

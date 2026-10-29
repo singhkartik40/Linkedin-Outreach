@@ -18,7 +18,7 @@ const people = url => {
  return `<!doctype html><html><body>${filtered || companyIndex === 4 ? cards : `<div role="button"><div aria-label="Filter by Current companies">Current companies</div></div><div id="filter"></div><script>document.querySelector('[role=button]').onclick=()=>{document.querySelector('#filter').innerHTML='<input placeholder="Add a company"><div role="listbox"></div><a href="#">Show results</a>';document.querySelector('input').oninput=()=>{document.querySelector('[role=listbox]').innerHTML='<div role="option">${company}</div>';document.querySelector('[role=option]').onclick=()=>{};};document.querySelector('a').onclick=e=>{e.preventDefault();const u=new URL(location.href);u.searchParams.set('currentCompany','["1"]');location.href=u.href;};};</script>`}</body></html>`;
 };
 const profile = `<!doctype html><html><body><main><button>Connect</button></main><script>document.querySelector('button').onclick=()=>{document.body.dataset.connectClicked='true'}</script></body></html>`;
-const invite = `<!doctype html><html><body><button>Add a note</button><div id="editor"></div><script>document.querySelector('button').onclick=()=>{document.querySelector('#editor').innerHTML='<textarea placeholder="Write a note"></textarea><button>Send</button>';document.querySelector('#editor button').onclick=()=>{let status=document.createElement('div');status.setAttribute('role','alert');status.textContent='Invitation sent';document.body.appendChild(status);};}</script></body></html>`;
+const invite = `<!doctype html><html><body><button>Add a note</button><div id="editor"></div><div role="alert"></div><script>document.querySelector('button').onclick=()=>{document.querySelector('#editor').innerHTML='<textarea placeholder="Write a note"></textarea><button>Send</button>';document.querySelector('#editor button').onclick=()=>{document.querySelector('[role=alert]').textContent='Invitation sent';};}</script></body></html>`;
 
 (async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'outreach-extension-'));
@@ -119,16 +119,26 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
     if (!userInvite) console.error('No invitation tab:', { tabs: context.pages().map(tab => tab.url()), chromeTabs: await worker.evaluate(() => chrome.tabs.query({})), storage: await worker.evaluate(() => chrome.storage.local.get(['outreachSession', 'pendingOutreach'])), dashboard: (await page.locator('body').innerText()).slice(0, 600) });
     assert.ok(userInvite);
     await userInvite.locator('textarea').waitFor({ timeout: 15000 });
+    await userInvite.locator('textarea').fill('I edited the invitation before sending it.');
+    let confirmAttempts = 0;
+    await page.route('**/api/contacts/*/confirm-from-helper', async route => {
+      confirmAttempts++;
+      if (confirmAttempts === 1) { await route.fetch(); return route.abort(); }
+      return route.continue();
+    });
     await userInvite.getByRole('button', { name: 'Send', exact: true }).click();
-    try { await page.getByRole('button', { name: 'Completed (1)' }).waitFor({ timeout: 15000 }); }
+    try { await page.getByRole('button', { name: 'Completed (1)' }).waitFor({ timeout: 25000 }); }
     catch (error) {
       console.error('Confirmation debug:', { tabs: context.pages().map(tab => tab.url()), inviteText: await userInvite.locator('body').innerText(), storage: await worker.evaluate(() => chrome.storage.local.get(['outreachSession', 'pendingOutreach'])), dashboard: (await page.locator('body').innerText()).slice(0, 900) });
       throw error;
     }
+    assert.ok(confirmAttempts >= 2, 'lost API response is retried automatically');
+    await page.waitForTimeout(500);
+    assert.equal((await worker.evaluate(() => chrome.storage.local.get('confirmedDeliveries'))).confirmedDeliveries.length, 0, 'confirmation is removed only after dashboard acknowledgement');
     const confirmed = await (await page.request.get('http://127.0.0.1:14320/api/state')).json();
     assert.equal(confirmed.contacts.find(p => p.id === recipient.id).status, 'Send confirmed');
     assert.equal(confirmed.contacts.find(p => p.id === recipient.id).deliveryEvidence, 'LinkedIn send confirmed by Chrome helper');
-    console.log('PASS: real Chrome extension imported 20 team contacts plus 10 Google-discovered startup founders without a job or funding report, filled a note, and marked done after fixture send confirmation.');
+    console.log('PASS: real Chrome extension imported 20 team contacts plus 10 Google-discovered startup founders without a job or funding report, filled a note, and marked done after an edited note, a reused confirmation toast and a lost API response.');
   } finally {
     if (context) await context.close();
     server.kill(); await new Promise(resolve => server.exitCode !== null ? resolve() : server.once('exit', resolve));

@@ -5,7 +5,7 @@ import { founderFromDiscovery } from './founder-discovery.mjs';
 import { beginOutreach, consumeOutreach } from './outreach-intents.mjs';
 import { eligibleDesignJob, withinCompanyQuota, contactRole, currentEmployment } from './discovery-policy.mjs';
 import http from 'node:http';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -33,7 +33,7 @@ if (!store.get('politeDraftsV061')) {
 }
 store.set('contacts', store.get('contacts', []).map(contact => ({ ...contact, messageVersions: (contact.messageVersions || []).map(version => ({ ...version, id: version.id || randomUUID() })) })));
 const google = createGoogle();
-let sheetWriter = createSheetWriter();
+let sheetWriter = createSheetWriter(store.get('sheetWriterConfig') ?? undefined);
 const defaultSpreadsheetId = '1M61OSpGnYkTYEbZbsaABS4j7QsxaHRV9L24PXniwIIY';
 if (!store.get('spreadsheetId', '')) store.set('spreadsheetId', defaultSpreadsheetId);
 const sessionKeys = new Map();
@@ -59,7 +59,8 @@ function publicState() {
   const master = tracker?.valueRanges?.find(range => /^'?Master'?\!/.test(range.range))?.values || [];
   const headers = master[0] || [], column = name => headers.findIndex(value => String(value).trim().toLowerCase() === name.toLowerCase());
   const sheetRows = master.slice(1).map(row => ({ name: row[column('Person')] || '', profileUrl: row[column('Profile URL')] || '', status: row[column('Status')] || '' }));
-  const contacts = savedContacts.map(contact => {
+  const contacts = savedContacts.map(savedContact => {
+    const { helperReceiptHash, ...contact } = savedContact;
     const companyLimit = companyOutreachLimit(contact, tracker, savedContacts);
     const duplicate = tracker ? isDuplicate(contact, sheetRows) : false;
     const completed = ['Send confirmed', 'Sent'].includes(contact.status);
@@ -142,6 +143,11 @@ const server = http.createServer(async (req, res) => {
   try {
     if (url.pathname === '/api/health' && req.method === 'GET') return reply(res, 200, { app: 'outreach-desk', ready: true });
     if (url.pathname === '/api/state' && req.method === 'GET') return reply(res, 200, publicState());
+    if (url.pathname === '/api/tracker/writer/script' && req.method === 'GET') {
+      const script = await readFile(path.join(root, 'sheets', 'OutreachWriter.gs'), 'utf8');
+      res.writeHead(200, { 'Content-Type': 'text/plain;charset=utf-8', 'Content-Disposition': 'attachment; filename="OutreachWriter.gs"', 'Cache-Control': 'no-store' });
+      return res.end(script);
+    }
     if (url.pathname === '/api/job-board/sync' && req.method === 'POST') return reply(res, 200, await jobBoard.sync());
     if (/^\/api\/jobs\/[\w-]+\/people-search$/.test(url.pathname) && req.method === 'POST') {
       await ensureFreshTracker();
@@ -269,10 +275,12 @@ const server = http.createServer(async (req, res) => {
       const id = url.pathname.split('/')[3], contact = store.get('contacts', []).find(item => item.id === id);
       if (!contact) return reply(res, 404, { error: 'Contact not found.' });
       const input = await body(req);
+      const receiptHash = typeof input.receiptToken === 'string' ? createHash('sha256').update(input.receiptToken).digest('hex') : '';
+      if (receiptHash && contact.helperReceiptHash === receiptHash && ['Send confirmed', 'Sent'].includes(contact.status)) return reply(res, 200, {saved:true,alreadyDone:true,sheetUpdated:contact.status === 'Sent',error:contact.status === 'Sent' ? undefined : 'Sheet update pending; use Retry Sheet update.'});
       if (!consumeOutreach(input.receiptToken, contact)) return reply(res, 403, { error: 'The outreach receipt is invalid or expired.' });
       if (contact.deletedAt || contact.status !== 'Draft ready') return reply(res, 409, { error: 'Contact is no longer ready for outreach.' });
       const confirmedAt = new Date().toISOString();
-      store.set('contacts', store.get('contacts', []).map(item => item.id === id ? { ...item, status: 'Send confirmed', confirmedAt, deliveryEvidence: 'LinkedIn send confirmed by Chrome helper', updatedAt: confirmedAt } : item));
+      store.set('contacts', store.get('contacts', []).map(item => item.id === id ? { ...item, status: 'Send confirmed', helperReceiptHash:receiptHash, confirmedAt, deliveryEvidence: 'LinkedIn send confirmed by Chrome helper', updatedAt: confirmedAt } : item));
       store.event('contact', `${contact.name}: LinkedIn send confirmed by Chrome helper; Sheet write started.`);
       return reply(res, 200, await syncCompletedContact(id));
     }
@@ -329,8 +337,9 @@ const server = http.createServer(async (req, res) => {
       if (typeof input.url !== 'string' || typeof input.token !== 'string') throw new Error('Enter an Apps Script deployment URL and write token.');
       const next = createSheetWriter({ url: input.url, token: input.token });
       if (!next.configured()) throw new Error('Use an Apps Script /exec URL and a write token of at least 32 characters.');
+      store.set('sheetWriterConfig', { url: input.url.trim(), token: input.token.trim() });
       sheetWriter = next;
-      store.event('settings', 'Sheet writer configured in server memory. No write token logged.');
+      store.event('settings', 'Sheet writer settings saved on this computer. No write token logged.');
       return reply(res, 200, { saved: true });
     }
     if (url.pathname === '/api/tracker/sync' && req.method === 'POST') { await syncTracker(); return reply(res, 200, { synced: true }); }

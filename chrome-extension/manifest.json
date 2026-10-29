@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Outreach Desk LinkedIn Helper",
-  "version": "0.6.1",
+  "version": "0.6.3",
   "description": "Prepares LinkedIn connection dialogs, fills the full outreach message, and copies the full outreach message.",
   "permissions": [
     "storage",
@@ -32,6 +32,7 @@
         "https://www.linkedin.com/in/*"
       ],
       "js": [
+        "send-watch.js",
         "linkedin.js"
       ],
       "run_at": "document_idle"
@@ -41,6 +42,7 @@
         "https://www.linkedin.com/preload/custom-invite/*"
       ],
       "js": [
+        "send-watch.js",
         "invite.js"
       ],
       "run_at": "document_idle"

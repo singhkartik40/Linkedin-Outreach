@@ -69,7 +69,7 @@ The helper lets the app open LinkedIn, find people, and fill in a message.
 2. Turn on **Developer mode**.
 3. Click **Load unpacked**.
 4. Select the project's **chrome-extension** folder.
-5. Check that **Outreach Desk LinkedIn Helper v0.6.1** is enabled.
+5. Check that **Outreach Desk LinkedIn Helper v0.6.3** is enabled.
 6. Refresh the Outreach Desk page.
 
 **Already installed?** Click the helper's **Reload** button, then refresh Outreach Desk. You do not need to remove and install it again.
@@ -136,24 +136,20 @@ The app uses [Kartik's outreach tracker](https://docs.google.com/spreadsheets/d/
 
 To read it, keep the sheet shared as **Anyone with the link → Viewer**, then click **Tracker → Refresh tracker**. This checks previous contacts before outreach. No Google login setup is needed for these public reads.
 
-A public sheet can be read, but that does **not** let the app change it. To update the sheet after Mark done, complete the one-time setup below.
+A public sheet can be read, but that does **not** let the app change it. To update the sheet after a confirmed LinkedIn send, complete the one-time setup below. Until then, Completed contacts stay saved locally and show Sheet update pending. Do not send those invitations again.
 
 <details>
-<summary>One-time setup: let Mark done update the Sheet</summary>
+<summary>One-time setup: enable automatic Sheet updates</summary>
 
-1. In the Sheet, choose **Extensions → Apps Script**.
-2. Paste the contents of [`sheets/OutreachWriter.gs`](sheets/OutreachWriter.gs) into the script.
-3. Create a long random secret token. You can generate one locally with:
+1. Open **Tracker → Automatic Master updates** in Outreach Desk and download the writer script. Open the downloaded file as text.
+2. In your Google Sheet, choose **Extensions → Apps Script**. Paste the script into the editor and save.
+3. Back in Outreach Desk, click **Generate write token**, then **Copy token**.
+4. In Apps Script, open **Project Settings → Script properties**. Add a property named **OUTREACH_WRITE_TOKEN** and paste that token as its value. Save it.
+5. Choose **Deploy → New deployment → Web app**. Set **Execute as: Me** and **Who has access: Anyone**. Authorize access with the Google account that owns or can edit the Sheet, then deploy. The secret token protects the public web address.
+6. Copy the web app URL ending in `/exec` into Outreach Desk and click **Save writer on this computer**. The token field should still contain the value you generated. Keep it private.
+7. Open **Outreach → Completed** and click **Retry Sheet update** on pending entries. Only a verified successful update means the Sheet is connected correctly.
 
-```powershell
-node -e "console.log(require('node:crypto').randomBytes(32).toString('hex'))"
-```
-
-4. In Apps Script settings, add a Script property named **OUTREACH_WRITE_TOKEN** with that value.
-5. Deploy it as a **Web app**, running as yourself, with access set to **Anyone**. Keep the token secret: it protects this public web address.
-6. In the app's **Tracker** page, save the deployment's `/exec` address and the same token.
-
-To keep these settings after restarting the service, add `SHEET_WRITE_WEB_APP_URL` and `SHEET_WRITE_TOKEN` to your private `.env` file.
+No `.env` editing or restart is required. Writer settings are saved in the private `.data` database and survive service restarts. The token is not encrypted on disk: keep this directory private and out of Git. Existing `.env` values still work if no writer settings have been saved in the app.
 
 The writer updates the matching contact's status/date, or adds a new row if needed, then checks the result. If it fails, the app keeps delivery recorded locally. Use **Retry Sheet update**; do not resend the LinkedIn message.
 
@@ -238,7 +234,7 @@ Click **Find 4 people for this job** to search only that company: up to **2 desi
 3. The helper opens each profile and checks the visible name, current founder role, company and Indian location.
 4. Verified contacts appear in **Founders & co-founders** with a design pitch, portfolio and résumé links. No job or funding claim is invented.
 
-Reload helper **v0.6.1** in Chrome and allow its access to **Google Search** as well as LinkedIn. If Google asks for verification or LinkedIn asks you to sign in, complete that yourself and retry. Empty or blocked results are reported; the app cannot guarantee 20 matches.
+Reload helper **v0.6.3** in Chrome and allow its access to **Google Search** as well as LinkedIn. If Google asks for verification or LinkedIn asks you to sign in, complete that yourself and retry. Empty or blocked results are reported; the app cannot guarantee 20 matches.
 
 
 ### What changed in v0.6.1
@@ -248,7 +244,7 @@ Reload helper **v0.6.1** in Chrome and allow its access to **Google Search** as 
 - A person must have an explicit current role at the hiring company. A past-company mention or search keyword alone does not qualify. Older drafts without current-company evidence show a warning and cannot be sent; a new scan can recheck them.
 - Draft messages use varied, polite wording for designers, recruiters and founders. Both links remain intact within 290 characters. Existing unsent drafts are updated once, with their previous wording kept in message history. Completed and skipped contacts stay unchanged.
 
-Reload the Chrome helper to **v0.6.1**, then refresh the dashboard.
+Use the current helper **v0.6.3**, then refresh the dashboard.
 
 
 ### India jobs and company outreach limits (v0.6.2)
@@ -259,4 +255,10 @@ The tracker is refreshed on startup, before scans and outreach preparation when 
 
 Five distinct people marked Sent, Invitation pending or otherwise confirmed reached for a company and posting is the limit. Confirmed local sends count too, including Sheet writes still pending. Extra drafts move out of Active into **Company limit**; they are not deleted. Separate known job links are separate postings. Historical rows without a job link count conservatively against the company. An explicit repost with a timestamp newer than the old sends allows a new round; refreshing the page alone never resets the count. Historical sends without dates remain counted. The same individual is still protected from duplicate outreach across postings.
 
-The Chrome helper remains v0.6.1 for this update; refresh the dashboard only.
+The v0.6.2 changes did not require a helper update. For the current release, use helper v0.6.3 and refresh the dashboard.
+
+## Automatic completion — helper v0.6.3
+
+Click **Send outreach**, review the prepared invitation in LinkedIn, and click LinkedIn's final **Send** button. When LinkedIn confirms success, the person moves to **Completed** automatically and the app tries to update the Sheet. Opening or cancelling the invitation does not mark it sent. Edited notes and **Send without a note** are supported when a success signal is visible.
+
+Keep the dashboard open during sending. The helper retries delivery of the confirmation after temporary dashboard/API failures, within the 15-minute outreach session. If no confirmation is visible, verify the invitation yourself before using **Mark done**. To enable the updated tracking, reload the helper at `chrome://extensions` and refresh Outreach Desk.

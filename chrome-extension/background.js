@@ -138,7 +138,7 @@ function scheduleInviteProbe(tabId, delay = 1200) {
       if (!String(current.url || '').startsWith('https://www.linkedin.com/preload/custom-invite/')) return;
       const response = await chrome.tabs.sendMessage(tabId, { type: 'invite-probe' }).catch(() => null);
       if (!response?.ok) {
-        await chrome.scripting.executeScript({ target: { tabId }, files: ['invite.js'] });
+        await chrome.scripting.executeScript({ target: { tabId }, files: ['send-watch.js', 'invite.js'] });
         await chrome.tabs.sendMessage(tabId, { type: 'invite-probe' }).catch(() => null);
       }
     } catch {}
@@ -258,9 +258,12 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     chrome.storage.local.get('outreachSession').then(async ({ outreachSession }) => {
       const tabUrl = sender.tab?.url || '';
       if (!outreachSession?.awaitingConfirmation || outreachSession.expiresAt < Date.now() || outreachSession.tabId !== sender.tab?.id || !/^https:\/\/www\.linkedin\.com\/(?:in\/|preload\/custom-invite\/)/.test(tabUrl)) { sendResponse({ ok: false }); return; }
+      const { confirmedDeliveries = [] } = await chrome.storage.local.get('confirmedDeliveries');
+      const delivery = { contactId: outreachSession.contactId, receiptToken: outreachSession.receiptToken, expiresAt: outreachSession.expiresAt };
+      await chrome.storage.local.set({ confirmedDeliveries: [...confirmedDeliveries.filter(item => item.contactId !== delivery.contactId && item.expiresAt > Date.now()), delivery] });
       await chrome.storage.local.remove('outreachSession');
       const tabs = await chrome.tabs.query({ url: [`${LOCAL_ORIGIN}/*`] });
-      for (const tab of tabs) if (tab.id) await chrome.tabs.sendMessage(tab.id, { type: 'outreach-delivered', contactId: outreachSession.contactId }).catch(() => {});
+      for (const tab of tabs) if (tab.id) await chrome.tabs.sendMessage(tab.id, { type: 'outreach-delivered', ...delivery }).catch(() => {});
       sendResponse({ ok: true });
     }).catch(() => sendResponse({ ok: false }));
     return true;
@@ -359,8 +362,17 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     return true;
   }
 
-  if (!['prepare-outreach', 'scan-people'].includes(request?.type)) return;
+  if (!['prepare-outreach', 'scan-people', 'sync-deliveries', 'ack-delivery'].includes(request?.type)) return;
   if (!sender.url?.startsWith(`${LOCAL_ORIGIN}/`)) { sendResponse({ ok: false, error: 'Untrusted sender.' }); return; }
+  if (['sync-deliveries', 'ack-delivery'].includes(request?.type)) {
+    chrome.storage.local.get('confirmedDeliveries').then(async ({ confirmedDeliveries = [] }) => {
+      const pending = confirmedDeliveries.filter(item => item.expiresAt > Date.now() && !(request.type === 'ack-delivery' && item.contactId === request.payload?.contactId && item.receiptToken === request.payload?.receiptToken));
+      await chrome.storage.local.set({confirmedDeliveries:pending});
+      if (request.type === 'sync-deliveries' && sender.tab?.id) for (const delivery of pending) await chrome.tabs.sendMessage(sender.tab.id,{type:'outreach-delivered',...delivery}).catch(() => {});
+      sendResponse({ok:true});
+    }).catch(() => sendResponse({ok:false}));
+    return true;
+  }
 
   if (request.type === 'scan-people') {
     const targetJob = request.payload?.job;
@@ -405,14 +417,14 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
           catch { return false; }
         });
         if (existing?.id) {
-          await chrome.storage.local.set({ outreachSession: { contactId, tabId: existing.id, profileUrl: profile.href, expiresAt: pendingOutreach.expiresAt, awaitingConfirmation: false } });
+          await chrome.storage.local.set({ outreachSession: { contactId, receiptToken, tabId: existing.id, profileUrl: profile.href, expiresAt: pendingOutreach.expiresAt, awaitingConfirmation: false } });
           await chrome.tabs.update(existing.id, { active: true });
           await chrome.tabs.reload(existing.id);
           sendResponse({ ok: true, tabId: existing.id });
         } else {
           const tab = await chrome.tabs.create({ url: profile.href, active: true });
           if (tab?.id) {
-            await chrome.storage.local.set({ outreachSession: { contactId, tabId: tab.id, profileUrl: profile.href, expiresAt: pendingOutreach.expiresAt, awaitingConfirmation: false } });
+            await chrome.storage.local.set({ outreachSession: { contactId, receiptToken, tabId: tab.id, profileUrl: profile.href, expiresAt: pendingOutreach.expiresAt, awaitingConfirmation: false } });
           }
           sendResponse({ ok: !!tab, tabId: tab?.id });
         }

@@ -7,6 +7,39 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import http from 'node:http';
+
+test('Sheet writer setup survives a service restart without exposing the token', async () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'outreach-writer-'));
+  seedTracker(dir);
+  const base = 'http://127.0.0.1:14321';
+  let child;
+  async function start() {
+    child = spawn(process.execPath, ['server/index.mjs'], { env: { ...process.env, PORT: '14321', DATA_DIR: dir }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+    await new Promise((resolve, reject) => {
+      const timer = setTimeout(() => reject(Error('Server startup timed out')), 10000);
+      child.stdout.once('data', () => { clearTimeout(timer); resolve(); });
+      child.once('error', error => { clearTimeout(timer); reject(error); });
+    });
+  }
+  async function stop() {
+    child.kill();
+    await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));
+  }
+  try {
+    await start();
+    const token = 'fixture-writer-secret-that-must-remain-server-side';
+    const result = await fetch(`${base}/api/tracker/writer/configure`, { method: 'POST', headers: { Origin: base, 'Content-Type': 'application/json' }, body: JSON.stringify({ url: 'https://script.google.com/macros/s/FIXTURE/exec', token }) });
+    assert.equal(result.status, 200);
+    await stop(); await start();
+    const publicText = await (await fetch(`${base}/api/state`)).text();
+    assert.equal(JSON.parse(publicText).google.writeConfigured, true);
+    assert.ok(!publicText.includes(token));
+    assert.ok(!publicText.includes('sheetWriterConfig'));
+  } finally {
+    if (child && child.exitCode === null) await stop();
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
 test('local API guards, import lifecycle, key redaction, and sending gate', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'outreach-api-'));
   seedTracker(dir);
@@ -62,6 +95,13 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     assert.ok(peopleState.contacts[0].message.includes('16hilLHZ3_4nvYX56vPKkKpMFjUqpk1oN/view?usp=sharing'));
     assert.equal((await post(`/contacts/${contactId}`, { message: 'x'.repeat(291) })).status, 400);
     assert.equal((await (await fetch(`${base}/api/state`)).json()).contacts[0].message, peopleState.contacts[0].message);
+    const prepared = await (await post(`/contacts/${contactId}/prepare`, {})).json();
+    assert.ok(prepared.receiptToken);
+    const confirm = () => post(`/contacts/${contactId}/confirm-from-helper`, { receiptToken: prepared.receiptToken });
+    assert.equal((await confirm()).status, 200);
+    assert.equal((await (await confirm()).json()).alreadyDone, true);
+    assert.equal((await post(`/contacts/${contactId}/confirm-from-helper`, { receiptToken: 'wrong-token' })).status, 403);
+    assert.ok(!(await (await fetch(`${base}/api/state`)).text()).includes('helperReceiptHash'));
     assert.equal((await post(`/contacts/${contactId}/done`, {})).status, 200);
     const doneState = await (await fetch(`${base}/api/state`)).json();
     assert.equal(doneState.contacts[0].status, 'Send confirmed');
@@ -80,6 +120,12 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     const writerState = await (await fetch(`${base}/api/state`)).text();
     assert.equal(JSON.parse(writerState).google.writeConfigured, true);
     assert.ok(!writerState.includes('test-token-with-at-least-thirty-two-characters'));
+    const savedConfigStore = createStore(dir);
+    assert.equal(savedConfigStore.get('sheetWriterConfig').token, 'test-token-with-at-least-thirty-two-characters');
+    savedConfigStore.close();
+    const scriptDownload = await fetch(`${base}/api/tracker/writer/script`);
+    assert.equal(scriptDownload.status, 200);
+    assert.match(await scriptDownload.text(), /function doPost/);
     const founder = { ...people[0], name: 'Founder Example', headline: 'Cofounder at Fresh Co', location: 'Indore, India', profileUrl: 'https://www.linkedin.com/in/founder-example/' };
     const founderImport = await (await post('/people/import', { people: [founder], jobs: recentJobs, mode: 'all' })).json();
     assert.equal(founderImport.added, 1, 'a founder outside the metro list needs no funding report');

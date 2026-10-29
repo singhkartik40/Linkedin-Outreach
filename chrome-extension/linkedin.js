@@ -66,30 +66,8 @@ function showStatus(message, tone = 'ready') {
   close.style.cssText = 'position:absolute;right:10px;top:7px;border:0;background:transparent;color:white;font-size:22px;cursor:pointer';
   close.onclick = () => banner.remove(); banner.appendChild(close); document.documentElement.appendChild(banner);
 }
-function sentSignal(previous) {
-  return [...document.querySelectorAll('[role="alert"], [role="status"], .artdeco-toast-item')].some(element => !previous.has(element) && /(?:invitation|connection request|message) (?:was |has been )?sent/i.test(clean(element.textContent)));
-}
 function watchUserSend(editor, note, kind) {
-  let watching = false;
-  document.addEventListener('click', async event => {
-    const button = event.target?.closest?.('button');
-    const value = editor instanceof HTMLTextAreaElement ? editor.value : clean(editor.innerText);
-    if (watching || !button || clean(button.textContent) !== 'Send' || value !== note) return;
-    watching = true;
-    const previous = new Set(document.querySelectorAll('[role="alert"], [role="status"], .artdeco-toast-item'));
-    const wasPending = !!exactControl('Pending', document.querySelector('main') || document);
-    const hadSentMessage = [...document.querySelectorAll('.msg-s-message-list-content, .msg-s-message-group__messages')].some(element => clean(element.innerText).includes(note));
-    const attempt = await chrome.runtime.sendMessage({ type: 'outreach-send-attempt' }).catch(() => null);
-    if (!attempt?.ok) return;
-    let checks = 0;
-    const timer = setInterval(async () => {
-      const sentMessage = kind === 'message' && !hadSentMessage && !clean(editor.innerText) && [...document.querySelectorAll('.msg-s-message-list-content, .msg-s-message-group__messages')].some(element => clean(element.innerText).includes(note));
-      if (sentSignal(previous) || (!wasPending && exactControl('Pending', document.querySelector('main') || document)) || sentMessage) {
-        clearInterval(timer);
-        await chrome.runtime.sendMessage({ type: 'outreach-delivered' }).catch(() => null);
-      } else if (++checks >= 30) clearInterval(timer);
-    }, 500);
-  }, true);
+  globalThis.outreachWatchSend({editor,kind,onStatus:showStatus});
 }
 async function verifyPendingInvitation() {
   const { outreachSession } = await chrome.storage.local.get('outreachSession');
@@ -125,13 +103,14 @@ async function prepareConnection(pending) {
     const addNote = exactControl('Add a note');
     if (addNote) { addNote.click(); await sleep(250); }
     const editor = await waitFor(() => noteEditor(document, existingEditors), 5000);
+    if (!editor) watchUserSend(null, '', 'invitation');
     if (!editor) return copied ? 'Connection dialog opened, but its note editor was not found. The full outreach message is on your clipboard.' : 'Connection dialog opened, but its note editor was not found. Copy the message from Outreach Desk.';
     const note = pending.message;
+    watchUserSend(editor, note, 'invitation');
     const maxLength = Number(editor.getAttribute('maxlength')) || 0;
     if (maxLength && note.length > maxLength) return `Connection dialog opened. LinkedIn allows ${maxLength} characters here; the outreach message is ${note.length}. The full message is copied for review.`;
     if (editor instanceof HTMLTextAreaElement) fillTextArea(editor, note);
     else fillContentEditable(editor, note);
-    watchUserSend(editor, note, 'invitation');
     return copied ? 'Full outreach message filled. The full outreach message is copied. Review the note, then click LinkedIn’s Send button.' : 'Full outreach message filled. Review it, then click LinkedIn’s Send button.';
   }
 
