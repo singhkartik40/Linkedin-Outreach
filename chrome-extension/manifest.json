@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Outreach Desk LinkedIn Helper",
-  "version": "0.5.1",
+  "version": "0.6.0",
   "description": "Prepares LinkedIn connection dialogs, fills the full outreach message, and copies the full outreach message.",
   "permissions": [
     "storage",
@@ -11,7 +11,8 @@
   ],
   "host_permissions": [
     "http://127.0.0.1:4318/*",
-    "https://www.linkedin.com/*"
+    "https://www.linkedin.com/*",
+    "https://www.google.com/search*"
   ],
   "background": {
     "service_worker": "background.js"

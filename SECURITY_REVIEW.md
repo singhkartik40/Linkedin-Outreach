@@ -1,5 +1,12 @@
 # Local security review — 28 October 2026
 
+## 29 October 2026 — v0.6.0
+
+Google founder discovery, a cached public job board and per-job contact searches are implemented. Public feed requests use fixed HTTPS endpoints, a timeout and a response size check; HTML is rendered as plain text. No new secret is required. Founder imports require a LinkedIn profile, visible current founder/company evidence and an Indian location. Candidate URLs are normalized to the permitted LinkedIn host. Google verification prompts are reported for the user to complete, never bypassed. Sending and delivery confirmation gates are unchanged.
+
+Validation: 60 unit/API tests, production build, desktop/mobile Chrome UI smoke and unpacked-extension fixture smoke passed. Live Jobicy and Remotive endpoints returned HTTP 200. Live Google displayed a verification page in the isolated browser, so signed-in live founder discovery remains dependent on the user's Chrome session. The full security scan found no source credential patterns and no dependency advisories; static analysis still reports 105 errors and 74 warnings (largely complexity, regex and code-pattern review items), so the full lint check is not clean. Focused checks on the new discovery/feed modules have no errors. Reports are local under `security-reports/` and are excluded from Git.
+
+
 Reviewed the Node API, React dashboard, Chrome extension, Google Sheet writer and dependencies. Local fixes are applied and the app server has been restarted. The Apps Script source is fixed locally, but there is no configured live Sheet writer to redeploy.
 
 Version 0.5.1 removes funding-report and metro-only requirements from founder discovery. Founder pitches do not claim funding. The static-analysis counts below are from the v0.5.0 scan; functional tests have been updated for founders outside metros without funding evidence and direct job links.

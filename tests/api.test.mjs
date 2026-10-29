@@ -79,6 +79,17 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     assert.equal(savedFounder.funding, null);
     assert.match(savedFounder.message, /pitch/);
     assert.doesNotMatch(savedFounder.message, /funding|refer me/);
+    const independent = {...founder,name:'Independent Founder',company:'Independent Startup',headline:'Founder at Independent Startup',profileUrl:'https://www.linkedin.com/in/independent-founder/',startupSourceUrl:'https://www.linkedin.com/company/independent-startup/',googleUrl:'https://www.google.com/search?q=startup',evidence:'Founder at Independent Startup'};
+    const independentResult=await (await post('/founders/import',{people:[independent]})).json();
+    assert.equal(independentResult.added,1);
+    assert.equal((await (await post('/founders/import',{people:[independent]})).json()).added,0);
+    const independentContact=(await (await fetch(`${base}/api/state`)).json()).contacts.find(contact=>contact.name===independent.name);
+    assert.equal(independentContact.jobId,''); assert.doesNotMatch(independentContact.message,/opening|refer me/);
+    const target=await (await post(`/jobs/${peopleState.jobs.find(job=>job.facts.company.value==='Fresh Co').id}/people-search`,{})).json();
+    assert.equal(target.job.company,'Fresh Co'); assert.ok(target.job.verifiedJobId);
+    const targetedPerson={...people[0],name:'Targeted Designer',headline:'UX Designer',profileUrl:'https://www.linkedin.com/in/targeted-designer/'};
+    const targeted=await (await post('/people/import',{people:[targetedPerson],jobs:[target.job],targeted:true})).json();
+    assert.equal(targeted.added,1);
   } finally {
     child.kill();
     await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));

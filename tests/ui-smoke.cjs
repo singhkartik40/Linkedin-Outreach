@@ -14,6 +14,7 @@ const assert = require('node:assert/strict');
     browser = await chromium.launch({ channel: 'chrome', headless: true });
     const page = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
     const errors = []; page.on('pageerror', e => errors.push(e.message));
+    await page.route('**/api/job-board/sync', route => route.fulfill({json:{added:0,sources:{}}}));
     await page.goto('http://127.0.0.1:14319');
     await page.getByRole('heading', { name: /Find the right person/ }).waitFor();
     mkdirSync('test-results', { recursive: true });
@@ -53,20 +54,25 @@ const assert = require('node:assert/strict');
     await page.screenshot({ path: 'test-results/overview-mobile.png', fullPage: true, animations: 'disabled' });
     const scanPage = await browser.newPage({ viewport: { width: 1440, height: 1050 } });
     const scanErrors = []; scanPage.on('pageerror', e => scanErrors.push(e.message));
+    await scanPage.route('**/api/job-board/sync', route => route.fulfill({json:{added:0,sources:{}}}));
     await scanPage.addInitScript(() => {
       window.addEventListener('message', event => {
         if (event.source !== window || event.data?.source !== 'outreach-desk' || !['ping-helper', 'scan-people'].includes(event.data?.type)) return;
         const send = (type, payload) => window.postMessage({ source: 'outreach-desk-helper', type, payload }, location.origin);
-        window.postMessage({ source: 'outreach-desk-helper', requestId: event.data.requestId, ok: true, version: '0.5.1' }, location.origin);
+        window.postMessage({ source: 'outreach-desk-helper', requestId: event.data.requestId, ok: true, version: '0.6.0' }, location.origin);
         if (event.data.type === 'ping-helper') return;
-        if (event.data.payload.mode !== 'all') throw new Error('Every scan must include founders');
+        if (!event.data.payload.job && event.data.payload.mode !== 'all') throw new Error('Every full scan must include founders');
         setTimeout(() => send('people-scan-progress', { phase: 'jobs', percent: 30, detail: 'Checking 2 recent jobs', jobsFound: 1, peopleFound: 0 }), 60);
         setTimeout(() => send('people-scan-progress', { phase: 'people', percent: 70, detail: 'Checking companies', jobsFound: 1, peopleFound: 12 }), 180);
-        const discovery = {
+        let discovery = {
           replace: false, cities: event.data.payload.cities,
           jobs: Array.from({length: 5}, (_, index) => ({ url: `https://www.linkedin.com/jobs/view/${9876543210 + index}/`, title: 'Product Designer', company: `Browser Test Co ${index}`, location: 'Bengaluru, India', recency: 'Posted 2 hours ago', source: 'Product Designer Browser Test Co India Posted 2 hours ago' })),
           people: Array.from({ length: 20 }, (_, i) => ({ name: `Test Person ${i + 1}`, headline: i % 4 < 2 ? 'UX Designer' : 'Recruiter', location: 'Bengaluru, India', company: `Browser Test Co ${Math.floor(i / 4)}`, jobUrl: `https://www.linkedin.com/jobs/view/${9876543210 + Math.floor(i / 4)}/`, profileUrl: `https://www.linkedin.com/in/browser-test-person-${i + 1}/` })),
         };
+        if (event.data.payload.job) {
+          const job=event.data.payload.job;
+          discovery={targeted:true,replace:false,cities:event.data.payload.cities,jobs:[job],people:Array.from({length:4},(_,i)=>({name:`Targeted Person ${i}`,headline:i<2?'UX Designer':'Recruiter',location:'Bengaluru, India',company:job.company,jobUrl:job.url,profileUrl:`https://www.linkedin.com/in/job-targeted-${i}/`}))};
+        }
         setTimeout(() => send('people-scan-batch', { ...discovery, people: discovery.people.slice(0, 4) }), 400);
         setTimeout(() => send('people-scan-results', discovery), 1800);
       });
@@ -74,7 +80,7 @@ const assert = require('node:assert/strict');
     await scanPage.goto('http://127.0.0.1:14319');
     await scanPage.getByRole('button', { name: /Outreach/ }).click();
     await scanPage.getByRole('button', {name:'Founders & co-founders',exact:true}).click();
-    assert.equal(await scanPage.getByRole('button', {name:'Find 20 new people',exact:true}).count(),1);
+    assert.equal(await scanPage.getByRole('button', {name:'Find startup founders',exact:true}).count(),1);
     await scanPage.getByRole('button', {name:'Designers & HR',exact:true}).click();
     await scanPage.getByRole('button', { name: 'Bengaluru', exact: true }).click();
     assert.equal(await scanPage.getByRole('button', { name: 'Bengaluru', exact: true }).getAttribute('aria-pressed'), 'true');
@@ -95,6 +101,10 @@ const assert = require('node:assert/strict');
     assert.match(jobTab.url(), /^https:\/\/www\.linkedin\.com\/jobs\/view\//);
     await jobTab.close();
     await scanPage.screenshot({ path: 'test-results/job-direct-links.png', fullPage: true });
+    await scanPage.getByRole('button', {name:'Find 4 people for this job',exact:true}).first().click();
+    try { await scanPage.getByRole('status').filter({hasText:'added 4 new people'}).waitFor(); } catch(error) { console.error('Targeted scan:',(await scanPage.locator('main').innerText()).slice(0,1700)); throw error; }
+    await scanPage.getByRole('button', {name:'Targeted Person 0',exact:true}).waitFor();
+    assert.equal((await (await scanPage.request.get('http://127.0.0.1:14319/api/state')).json()).contacts.filter(person=>person.name.startsWith('Targeted Person')).length,4);
     await scanPage.getByRole('button', { name: /Outreach/ }).click();
     await scanPage.getByLabel('Search contacts').fill('Test Person 1');
     await scanPage.getByRole('button', { name: 'Test Person 1', exact: true }).click();

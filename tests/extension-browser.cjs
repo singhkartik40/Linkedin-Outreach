@@ -25,15 +25,21 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
   const extension = path.join(dir, 'helper');
   cpSync(path.resolve('chrome-extension'), extension, { recursive: true });
   const backgroundPath = path.join(extension, 'background.js');
-  writeFileSync(backgroundPath, readFileSync(backgroundPath, 'utf8').replace('http://127.0.0.1:4318', 'http://127.0.0.1:14319'));
+  writeFileSync(backgroundPath, readFileSync(backgroundPath, 'utf8').replace('http://127.0.0.1:4318', 'http://127.0.0.1:14320'));
   const manifestPath = path.join(extension, 'manifest.json');
-  writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replaceAll('127.0.0.1:4318', '127.0.0.1:14319'));
-  const server = spawn(process.execPath, ['server/index.mjs'], { env: { ...process.env, PORT: '14319', DATA_DIR: path.join(dir, 'data') }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replaceAll('127.0.0.1:4318', '127.0.0.1:14320'));
+  const server = spawn(process.execPath, ['server/index.mjs'], { env: { ...process.env, PORT: '14320', DATA_DIR: path.join(dir, 'data') }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let context;
   try {
     await new Promise((resolve, reject) => { const timeout = setTimeout(() => reject(Error('Server startup timed out')), 10000); server.stdout.once('data', () => { clearTimeout(timeout); resolve(); }); server.once('error', reject); });
     context = await chromium.launchPersistentContext(path.join(dir, 'profile'), { executablePath: process.env.CHROME_EXECUTABLE || undefined, channel: process.env.CHROME_EXECUTABLE ? undefined : 'chromium', headless: true, args: [`--disable-extensions-except=${extension}`, `--load-extension=${extension}`] });
     const jobQueries = new Set();
+    await context.route('https://www.google.com/**', async route => {
+      const url=new URL(route.request().url()), query=url.searchParams.get('q')||'';
+      const match=query.match(/Browser Startup (\d+)/);
+      const content=match ? Array.from({length:2},(_,i)=>`<div class="g"><a href="https://www.linkedin.com/in/startup-founder-${match[1]}-${i}/"><h3>Founder ${match[1]} ${i} - Founder at Browser Startup ${match[1]}</h3></a><p>Founder at Browser Startup ${match[1]}, India</p></div>`).join('') : Array.from({length:5},(_,i)=>`<div class="g"><a href="https://www.linkedin.com/company/browser-startup-${i}/"><h3>Browser Startup ${i} - LinkedIn</h3></a><p>Indian startup building products</p></div>`).join('');
+      return route.fulfill({contentType:'text/html',body:`<html><body>${content}</body></html>`});
+    });
     await context.route('https://www.linkedin.com/**', async route => {
       const url = new URL(route.request().url());
       if (url.pathname === '/slow-loading.png') { await new Promise(resolve => setTimeout(resolve, 4000)); return route.fulfill({ status: 200, contentType: 'image/png', body: '' }).catch(() => {}); }
@@ -44,12 +50,16 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
         return route.fulfill({ status: 200, contentType: 'text/html', body: jobs.replaceAll('India', url.searchParams.get('location') || 'India').replaceAll('<div role="checkbox">Full-time</div>', '<div role="checkbox">Part-time</div>').replace('</body>', detailScript + '</body>') });
       }
       if (url.pathname.startsWith('/search/results/people/')) return route.fulfill({ status: 200, contentType: 'text/html', body: people(url) });
+      if (url.pathname.startsWith('/in/startup-founder-')) {
+        const parts=url.pathname.split('/')[2].split('-');
+        return route.fulfill({contentType:'text/html',body:`<main><h1>Startup Founder ${parts[2]} ${parts[3]}</h1><div>Founder at Browser Startup ${parts[2]}</div><div class="text-body-small inline t-black--light">Indore, India</div></main>`});
+      }
       if (url.pathname.startsWith('/in/')) return route.fulfill({ status: 200, contentType: 'text/html', body: profile.replace('browser-test-person-1', url.pathname.split('/')[2]) });
       if (url.pathname.startsWith('/preload/custom-invite/')) return route.fulfill({ status: 200, contentType: 'text/html', body: invite });
       return route.fulfill({ status: 404, body: '' });
     });
     const page = await context.newPage();
-    await page.goto('http://127.0.0.1:14319/');
+    await page.goto('http://127.0.0.1:14320/');
     await page.getByRole('button', { name: /Outreach/ }).click();
     await page.getByRole('button', { name: 'Delhi', exact: true }).click();
     await page.getByRole('button', { name: 'Mumbai', exact: true }).click();
@@ -63,7 +73,7 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
       if (linkedIn) console.error('People DOM:', await linkedIn.evaluate(() => ({ cards: document.querySelectorAll('a[componentkey^="auto-component-"][href*="/in/"]').length, first: document.querySelector('a[componentkey^="auto-component-"][href*="/in/"]')?.innerText, body: document.body.innerText.slice(0, 300) })));
       throw error;
     }
-    const state = await (await page.request.get('http://127.0.0.1:14319/api/state')).json();
+    const state = await (await page.request.get('http://127.0.0.1:14320/api/state')).json();
     assert.equal(state.contacts.length, 30);
     assert.equal(state.contacts.filter(person => person.contactRole === 'founder').length, 10);
     assert.ok(state.contacts.filter(person => person.contactRole === 'founder').every(person => !person.funding && person.location.includes('Indore') && /pitch/i.test(person.message)));
@@ -71,7 +81,8 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
     assert.equal(state.jobs.filter(job => job.sourceRecency === 'Past 24 hours (LinkedIn filter)').length, 3, 'Viewed/Applied cards inherit the active past-day filter');
     mkdirSync('test-results', { recursive: true });
     await page.screenshot({ path: 'test-results/extension-scan.png', fullPage: true });
-    for (let i=0;i<5;i++) { const group=state.contacts.filter(p=>p.company===`Browser Test Co ${i}`); assert.equal(group.length,6); assert.equal(group.filter(p=>p.headline.includes('UX Designer')).length,2); assert.equal(group.filter(p=>p.contactRole === 'founder').length,2); }
+    for (let i=0;i<5;i++) { const group=state.contacts.filter(p=>p.company===`Browser Test Co ${i}`); assert.equal(group.length,4); assert.equal(group.filter(p=>p.headline.includes('UX Designer')).length,2); assert.equal(group.filter(p=>p.contactRole === 'talent').length,2); }
+    assert.equal(state.contacts.filter(person=>person.contactRole==='founder' && !person.jobId).length,10);
     assert.equal(state.contacts[0].company, 'Browser Test Co 0');
     const worker = context.serviceWorkers()[0];
     assert.ok(worker, 'unpacked extension worker is active');
@@ -97,7 +108,7 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
     await existingProfile.goto(recipient.profileUrl);
     const recipientRow = page.locator('tr').filter({ has: page.locator(`a[href="${recipient.profileUrl}"]`) });
     await recipientRow.getByRole('button', { name: 'Send outreach' }).click();
-    const prepared = await (await page.request.get('http://127.0.0.1:14319/api/state')).json();
+    const prepared = await (await page.request.get('http://127.0.0.1:14320/api/state')).json();
     assert.equal(prepared.contacts.find(p => p.id === recipient.id).status, 'Draft ready', 'opening the note is not a send');
     let userInvite;
     for (let attempt = 0; attempt < 30 && !userInvite; attempt += 1) {
@@ -113,10 +124,10 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
       console.error('Confirmation debug:', { tabs: context.pages().map(tab => tab.url()), inviteText: await userInvite.locator('body').innerText(), storage: await worker.evaluate(() => chrome.storage.local.get(['outreachSession', 'pendingOutreach'])), dashboard: (await page.locator('body').innerText()).slice(0, 900) });
       throw error;
     }
-    const confirmed = await (await page.request.get('http://127.0.0.1:14319/api/state')).json();
+    const confirmed = await (await page.request.get('http://127.0.0.1:14320/api/state')).json();
     assert.equal(confirmed.contacts.find(p => p.id === recipient.id).status, 'Send confirmed');
     assert.equal(confirmed.contacts.find(p => p.id === recipient.id).deliveryEvidence, 'LinkedIn send confirmed by Chrome helper');
-    console.log('PASS: real Chrome extension imported 20 team contacts plus 10 founders outside metros without funding reports, filled a note, and marked done after fixture send confirmation.');
+    console.log('PASS: real Chrome extension imported 20 team contacts plus 10 Google-discovered startup founders without a job or funding report, filled a note, and marked done after fixture send confirmation.');
   } finally {
     if (context) await context.close();
     server.kill(); await new Promise(resolve => server.exitCode !== null ? resolve() : server.once('exit', resolve));

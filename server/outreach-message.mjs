@@ -10,7 +10,7 @@ export function buildOutreachMessage({ name, company, jobTitle, headline = '' })
   if (/\b(?:co[ -]?)?founder\b/i.test(headline)) {
     const links = `Portfolio: ${portfolioUrl} Resume: ${resumeUrl}`;
     for (const greeting of [`Hi ${first},`, 'Hi,']) {
-      for (const pitch of [`I saw the ${clean(jobTitle)} opening at ${clean(company)}. I design product/UX experiences. May I share a design pitch for your team?`, `I saw ${clean(company)}'s design opening. May I pitch how I could help your product team?`, 'I design product/UX experiences. May I share a design pitch for your team?']) {
+      for (const pitch of [jobTitle ? `I saw the ${clean(jobTitle)} opening at ${clean(company)}. I design product/UX experiences. May I share a design pitch for your team?` : `I came across ${clean(company)}. I have 4+ years in product/UX design. May I share a design pitch for your team?`, jobTitle ? `I saw ${clean(company)}'s design opening. May I pitch how I could help your product team?` : `I came across ${clean(company)}. May I pitch how I could help your product team?`, 'I design product/UX experiences. May I share a design pitch for your team?']) {
         const message = `${greeting} ${pitch} ${links}`;
         if (message.length <= outreachCharacterLimit) return message;
       }

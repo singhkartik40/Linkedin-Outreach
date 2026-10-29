@@ -1,4 +1,6 @@
 import { initialSchedule, claimSchedule, finishSchedule, INTERVAL } from './discovery-schedule.mjs';
+import { createJobBoard, jobSnapshot } from './job-board.mjs';
+import { founderFromDiscovery } from './founder-discovery.mjs';
 import { beginOutreach, consumeOutreach } from './outreach-intents.mjs';
 import { eligibleDesignJob, withinCompanyQuota, contactRole, explicitlyFormerEmployee } from './discovery-policy.mjs';
 import http from 'node:http';
@@ -19,6 +21,7 @@ import { providerDefaults, validateProvider, generate, parseJson, extractionProm
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const port = Number(process.env.PORT || 4318);
 const store = createStore(process.env.DATA_DIR || path.join(root, '.data'));
+const jobBoard = createJobBoard(store);
 if (!store.get('fullNoteLinksMigrationV2')) {
   store.set('contacts', refreshDraftMessages(store.get('contacts', [])));
   store.set('fullNoteLinksMigrationV2', true);
@@ -54,7 +57,7 @@ function publicState() {
     return { ...contact, message: String(contact.message || ''), sheetStatus: !tracker ? 'Tracker not connected' : duplicate ? 'Already in tracker' : 'Clear to contact', sheetSyncStatus, sheetCheckedAt: tracker?.syncedAt || null, outreachBlocked: !!contact.deletedAt || contact.status === 'Skipped' || completed || !tracker || duplicate };
   });
   const { valueRanges, ...trackerSummary } = tracker || {};
-  return { discoverySchedule: store.get('discoverySchedule'), provider: provider ? { ...provider, hasKey: !!keyFor(provider) } : null, google: { ...google.status(), writeConfigured: sheetWriter.configured() }, spreadsheetId: store.get('spreadsheetId', defaultSpreadsheetId), tracker: tracker ? trackerSummary : null, jobs, contacts, events: store.events(), sending: sendingCapability, automation: store.get('automation', { autoSync: false, desiredSending: 'automatic' }) };
+  return { jobBoardSources: store.get('jobBoardSources', {}), discoverySchedule: store.get('discoverySchedule'), provider: provider ? { ...provider, hasKey: !!keyFor(provider) } : null, google: { ...google.status(), writeConfigured: sheetWriter.configured() }, spreadsheetId: store.get('spreadsheetId', defaultSpreadsheetId), tracker: tracker ? trackerSummary : null, jobs, contacts, events: store.events(), sending: sendingCapability, automation: store.get('automation', { autoSync: false, desiredSending: 'automatic' }) };
 }
 function contactFromDiscovery(person, jobs) {
   const name = String(person.name || '').replace(/\s+/g, ' ').trim();
@@ -120,6 +123,24 @@ const server = http.createServer(async (req, res) => {
   if (url.pathname.startsWith('/api/') && !['GET', 'HEAD'].includes(req.method) && !allowedOrigins.has(req.headers.origin)) return reply(res, 403, { error: 'Open the local app to make changes.' });
   try {
     if (url.pathname === '/api/state' && req.method === 'GET') return reply(res, 200, publicState());
+    if (url.pathname === '/api/job-board/sync' && req.method === 'POST') return reply(res, 200, await jobBoard.sync());
+    if (/^\/api\/jobs\/[\w-]+\/people-search$/.test(url.pathname) && req.method === 'POST') {
+      const job = store.jobs().find(item => item.id === url.pathname.split('/')[3]);
+      if (!job) return reply(res, 404, { error: 'Job not found.' });
+      return reply(res, 200, { job: jobSnapshot(job) });
+    }
+    if (url.pathname === '/api/founders/import' && req.method === 'POST') {
+      const input = await body(req), current = store.get('contacts', []), known = new Set(current.map(contact => profileSlug(contact.profileUrl)));
+      let added = 0, rejected = 0;
+      for (const person of (Array.isArray(input.people) ? input.people : []).slice(0, 20)) {
+        let contact; try { contact = founderFromDiscovery(person); } catch { rejected++; continue; }
+        const slug = profileSlug(contact.profileUrl);
+        if (known.has(slug) || current.filter(item => item.company.toLowerCase() === contact.company.toLowerCase() && item.contactRole === 'founder').length >= 2) continue;
+        current.push(contact); known.add(slug); added++;
+      }
+      store.set('contacts', current);
+      return reply(res, 200, { added, addedFounders: added, rejected, total: current.length });
+    }
     if (url.pathname === '/api/settings/provider' && req.method === 'POST') {
       const input = await body(req), config = validateProvider(input);
       if (input.apiKey !== undefined && typeof input.apiKey !== 'string') throw new Error('API key must be text.');
@@ -231,7 +252,10 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/people/import' && req.method === 'POST') {
       const input = await body(req), people = Array.isArray(input.people) ? input.people.slice(0, 50) : [];
       if (!people.length) return reply(res, 200, { saved: true, added: 0, total: store.get('contacts', []).length });
-      const freshUrls = new Set((Array.isArray(input.jobs) ? input.jobs : []).filter(item => isLatestJob(item) && eligibleDesignJob(item) && matchesCity(item.location, input.cities, item.country, item.searchLocation)).map(item => { try { return canonicalUrl(item.url); } catch { return ''; } }).filter(Boolean));
+      const freshUrls = new Set((Array.isArray(input.jobs) ? input.jobs : []).filter(item => {
+        if (item.verifiedJobId) { const saved = store.jobs().find(job => job.id === item.verifiedJobId && job.url === canonicalUrl(item.url)); if (!saved) return false; try { jobSnapshot(saved); return true; } catch { return false; } }
+        return isLatestJob(item) && eligibleDesignJob(item) && matchesCity(item.location, input.cities, item.country, item.searchLocation);
+      }).map(item => { try { return canonicalUrl(item.url); } catch { return ''; } }).filter(Boolean));
       if (!freshUrls.size) throw new Error('No visibly recent jobs were supplied with this scan. No people were imported.');
       const jobs = store.jobs().filter(job => freshUrls.has(job.url)), current = store.get('contacts', []);
       const founderMode = input.mode === 'founders';
@@ -312,5 +336,10 @@ const timer = setInterval(async () => {
   try { await syncTracker(); } catch { store.event('sync-error', 'Automatic tracker refresh failed. Check public Sheet sharing or refresh manually.'); }
 }, 5 * 60 * 60 * 1000);
 timer.unref();
+if (port === 4318) {
+  const boardTimer = setInterval(() => { void jobBoard.sync().catch(() => {}); }, 6 * 3600000);
+  boardTimer.unref();
+  void jobBoard.sync().catch(() => {});
+}
 server.listen(port, '127.0.0.1', () => console.log(`Outreach Desk is running at http://127.0.0.1:${port}`));
 for (const signal of ['SIGINT', 'SIGTERM']) process.on(signal, () => { clearInterval(timer); server.close(() => { store.close(); process.exit(0); }); });

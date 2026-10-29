@@ -62,6 +62,7 @@ test('scan checks recent jobs before people, excludes saved profiles, and report
   assert.match(navigation[0], /\/jobs\/search\//);
   assert.match(navigation[0], /f_TPR=r86400/);
   assert.equal(state.peopleScan.mode, 'all', 'every new scan includes founders');
+  state.peopleScan.mode = 'team'; // This case isolates the job-to-team stages.
   const job = (id, company, location, recency) => ({ url: `https://www.linkedin.com/jobs/view/${id}/`, title: 'Product Designer', company, location, recency, searchLocation: 'Delhi', source: 'Job card' });
   await receive({ type: 'jobs-scan-page', payload: { jobs: [], error: 'First city page did not finish loading', stageId: 'jobs:0' } }, { tab: { id: 42 } });
   assert.match(navigation[1], /\/jobs\/search\//);
@@ -74,11 +75,8 @@ test('scan checks recent jobs before people, excludes saved profiles, and report
   await receive({ type: 'people-scan-page', payload: { verifiedCompany: true, people: [person('saved-person'), person('new-one'), person('new-one')] } }, { tab: { id: 42 } });
   assert.match(navigation[3], /Acme/);
   await receive({ type: 'people-scan-page', payload: { verifiedCompany: true, people: [] } }, { tab: { id: 42 } });
-  assert.match(navigation[4], /founder/);
-  await receive({ type: 'people-scan-page', payload: { verifiedCompany: true, people: [] } }, { tab: { id: 42 } });
-  assert.match(navigation[5], /Beta/);
+  assert.match(navigation[4], /Beta/);
   await receive({ type: 'people-scan-page', payload: { verifiedCompany: true, people: [person('new-two')] } }, { tab: { id: 42 } });
-  await receive({ type: 'people-scan-page', payload: { verifiedCompany: true, people: [] } }, { tab: { id: 42 } });
   await receive({ type: 'people-scan-page', payload: { verifiedCompany: true, people: [] } }, { tab: { id: 42 } });
   const result = updates.find(message => message.type === 'people-scan-results');
   assert.deepEqual(Array.from(result.payload.people, person => person.name), ['new-one', 'new-two']);
@@ -206,22 +204,23 @@ test('founder scan excludes other roles, caps each company at two and completes 
  assert.equal(state.peopleScan,undefined);
 });
 
-test('a combined scan searches founders outside metros after reaching the team target', async () => {
+test('combined scan discovers startups on Google, verifies founders on LinkedIn and streams them without jobs', async () => {
   let listener;
-  const team = Array.from({ length: 20 }, (_, index) => ({ name: `Saved team ${index}`, contactRole: 'designer', company: 'Earlier company', profileUrl: `https://www.linkedin.com/in/earlier-${index}/`, jobUrl: 'https://www.linkedin.com/jobs/view/123/' }));
-  const state = { peopleScan: { scanId: 'all', tabId: 42, phase: 'people', mode: 'all', role: 'talent', companies: ['Acme'], companyIndex: 0, jobs: [{ url: 'https://www.linkedin.com/jobs/view/123/', company: 'Acme', location: 'India' }], results: team, excludedProfiles: [], limit: 20, cities: ['India'] } };
-  const messages = [], navigation = [];
-  const chrome = { runtime: { onMessage: { addListener(callback) { listener = callback; } } }, storage: { local: { async get() { return { ...state }; }, async set(values) { Object.assign(state, values); }, async remove(key) { delete state[key]; } } }, tabs: { onUpdated: { addListener() {} }, async query() { return [{ id: 9 }]; }, async update(id, options) { navigation.push(options.url); }, async sendMessage(id, message) { messages.push(message); } } };
-  runInNewContext(readFileSync(new URL('../chrome-extension/background.js', import.meta.url), 'utf8'), { chrome, URL, URLSearchParams, Date, Math, Set, Map, Number, String, encodeURIComponent });
-  const receive = payload => new Promise(resolve => listener({ type: 'people-scan-page', payload: { verifiedCompany: true, ...payload } }, { tab: { id: 42 } }, resolve));
-  await receive({ people: [] });
-  assert.equal(state.peopleScan.role, 'founder');
-  assert.match(navigation.at(-1), /founder/);
-  const people = ['Indore, India', 'Jaipur, India', 'Bengaluru, India'].map((location, index) => ({ name: `Founder ${index}`, headline: 'Founder at Acme', location, profileUrl: `https://www.linkedin.com/in/acme-founder-${index}/` }));
-  await receive({ people });
-  const result = messages.find(message => message.type === 'people-scan-results').payload;
-  assert.equal(result.people.length, 22);
-  assert.equal(result.people.filter(person => person.contactRole === 'founder').length, 2);
-  assert.equal(result.people.find(person => person.contactRole === 'founder').location, 'Indore, India');
-  assert.equal(state.peopleScan, undefined);
+  const state = { peopleScan: { scanId:'all',tabId:42,phase:'people',mode:'all',role:'talent',companies:['Acme'],companyIndex:0,jobs:[],results:[],excludedProfiles:[],limit:20,cities:['India'] } };
+  const messages=[],navigation=[];
+  const chrome={runtime:{onMessage:{addListener(cb){listener=cb;}}},storage:{local:{async get(){return {...state};},async set(v){Object.assign(state,v);},async remove(k){delete state[k];}}},tabs:{onUpdated:{addListener(){}},async query(){return [{id:9}];},async update(id,options){navigation.push(options.url);},async sendMessage(id,message){messages.push(message);}}};
+  runInNewContext(readFileSync(new URL('../chrome-extension/background.js',import.meta.url),'utf8'),{chrome,URL,URLSearchParams,Date,Math,Set,Map,Number,String,encodeURIComponent,setTimeout(){return 1;},clearTimeout(){}});
+  const receive=(type,payload,url='')=>new Promise(resolve=>listener({type,payload},{tab:{id:42,url}},resolve));
+  await receive('people-scan-page',{verifiedCompany:true,people:[]});
+  assert.equal(state.peopleScan.phase,'startups'); assert.match(navigation.at(-1),/google.com/);
+  await receive('startup-scan-page',{stageId:'startups:0:0',companies:[{company:'Acme',startupSourceUrl:'https://www.linkedin.com/company/acme/'}]},navigation.at(-1));
+  assert.equal(state.peopleScan.phase,'google-founders');
+  const googleUrl=navigation.at(-1);
+  await receive('google-founders-page',{stageId:'google-founders:0:0',people:[{name:'Asha',company:'Acme',profileUrl:'https://www.linkedin.com/in/asha/',startupSourceUrl:'https://www.linkedin.com/company/acme/',googleUrl}]},googleUrl);
+  assert.equal(state.peopleScan.phase,'founder-profile');
+  await receive('founder-profile-page',{stageId:'founder-profile:0:0',person:{name:'Asha Rao',headline:'Founder at Acme',location:'Indore, India',evidence:'Founder at Acme'}},navigation.at(-1));
+  const batch=messages.find(message=>message.type==='people-scan-batch');
+  assert.equal(batch.payload.independentFounders,true); assert.equal(batch.payload.people[0].name,'Asha Rao');
+  const result=messages.find(message=>message.type==='people-scan-results').payload;
+  assert.equal(result.founders.length,1); assert.equal(result.people.length,0); assert.equal(state.peopleScan,undefined);
 });

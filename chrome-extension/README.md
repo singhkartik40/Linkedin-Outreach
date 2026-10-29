@@ -1,4 +1,4 @@
-# Chrome helper — v0.5.1
+# Chrome helper — v0.6.0
 
 This helper lets Outreach Desk open LinkedIn, find people, and fill outreach messages in your signed-in Chrome profile.
 
@@ -10,7 +10,7 @@ This helper lets Outreach Desk open LinkedIn, find people, and fill outreach mes
 4. Make sure the helper is enabled and can access LinkedIn and `http://127.0.0.1:4318/`.
 5. Refresh Outreach Desk in the same Chrome profile.
 
-Already installed? Click **Reload**, then refresh the dashboard. Check that the helper shows **0.5.1**. The helper does not work inside Codex's built-in browser.
+Already installed? Click **Reload**, then refresh the dashboard. Check that the helper shows **0.6.0**. The helper does not work inside Codex's built-in browser.
 
 ## How it works
 
@@ -27,3 +27,5 @@ The app marks the matching person done when it can see LinkedIn confirm the send
 If LinkedIn does not offer a note field, the message remains available to copy in Outreach Desk. The helper cannot bypass account limits, pending invitations, or sign-in checks.
 
 See the [main README](../README.md) for app setup, API keys, the Google Sheet, automatic scans and troubleshooting.
+
+Version 0.6.0 adds Google startup/founder discovery and per-job contact searches. Reload at chrome://extensions and allow access to https://www.google.com/search as well as LinkedIn. Founder candidates are checked on their visible LinkedIn profile before import. Google verification challenges are left for you to complete.

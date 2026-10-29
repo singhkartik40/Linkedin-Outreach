@@ -9,16 +9,16 @@ The app runs on your computer. Your code is saved in this [private GitHub reposi
 The app:
 
 1. Looks for recent full-time design jobs in your chosen locations.
-2. Finds designers, HR/recruiters, and founders at those companies.
+2. Finds designers and HR/recruiters at those companies, then searches Google for startups and checks their founder profiles on LinkedIn.
 3. Adds people to your list as the search runs.
 4. Writes a message with your portfolio and résumé links.
 5. Checks your tracker to help avoid contacting the same person twice.
 
 Each company can add up to **2 designers, 2 HR/recruiters, and 2 founders**. Each run aims for up to **20 designers/HR contacts plus 20 founders**. Some searches will find fewer people.
 
-**Founders do not need funding news or a metro-city location.** The app still matches them to companies with relevant job openings and follows the job location rules. For India-based jobs, it looks for people based in India. Founder messages are a pitch; employee messages ask about a referral.
+**Founders do not need funding news or a metro-city location.** Founders can be discovered without a job opening. Their LinkedIn profile must show a current founder role at the startup and a location in India. Founder messages are a pitch; employee messages ask about a referral.
 
-The two tabs, **Designers & HR** and **Founders & co-founders**, show different parts of the same search. Every scan searches both groups.
+The two tabs, **Designers & HR** and **Founders & co-founders**, show different parts of the same search. A full scan searches both groups. Clicking Find 20 new people while viewing the Founders tab runs the Google founder search directly.
 
 ## Open the app on this computer
 
@@ -69,7 +69,7 @@ The helper lets the app open LinkedIn, find people, and fill in a message.
 2. Turn on **Developer mode**.
 3. Click **Load unpacked**.
 4. Select the project's **chrome-extension** folder.
-5. Check that **Outreach Desk LinkedIn Helper v0.5.1** is enabled.
+5. Check that **Outreach Desk LinkedIn Helper v0.6.0** is enabled.
 6. Refresh the Outreach Desk page.
 
 **Already installed?** Click the helper's **Reload** button, then refresh Outreach Desk. You do not need to remove and install it again.
@@ -218,3 +218,24 @@ If needed, set `CHROME_EXECUTABLE` to the Playwright Chromium executable. For fr
 Security reports go into `security-reports/`. Static warnings are documented in [SECURITY_REVIEW.md](SECURITY_REVIEW.md); a nonzero security-scan exit is not the same as a confirmed vulnerability. This is local analysis, not a SonarQube upload.
 
 </details>
+
+## Job board and finding people for one job
+
+The refreshed interface uses a compact sidebar, quieter status displays, simpler filters and clearer row actions on desktop and mobile.
+
+Open **Job research** to see saved LinkedIn jobs alongside jobs from **Jobicy** and **Remotive**. Filter by source, location, age or company name. Use **Open on…** to visit the original listing.
+
+The service checks public job feeds when it starts and every six hours while running. **Refresh jobs** uses cached results if checked recently. Jobicy delays public listings by three hours; Remotive by 24 hours. Each source shows its status, including network problems. These feeds cover remote jobs; they do not cover every India job board. Original sources remain credited and linked.
+
+Feed references: [Jobicy API](https://jobicy.com/jobs-rss-feed) · [Remotive API](https://github.com/remotive-com/remote-jobs-api).
+
+Click **Find 4 people for this job** to search only that company: up to **2 designers and 2 HR/talent contacts**. Contacts arrive in **Outreach** as they are found. Existing people are skipped, so a run can return fewer than four. This action uses jobs from the past 24 hours. Older saved jobs remain available for review.
+
+## How the Google founder search works
+
+1. Google searches for startup company pages.
+2. It searches for those companies’ founders on LinkedIn.
+3. The helper opens each profile and checks the visible name, current founder role, company and Indian location.
+4. Verified contacts appear in **Founders & co-founders** with a design pitch, portfolio and résumé links. No job or funding claim is invented.
+
+Reload helper **v0.6.0** in Chrome and allow its access to **Google Search** as well as LinkedIn. If Google asks for verification or LinkedIn asks you to sign in, complete that yourself and retry. Empty or blocked results are reported; the app cannot guarantee 20 matches.
