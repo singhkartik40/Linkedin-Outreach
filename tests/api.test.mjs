@@ -36,13 +36,19 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     const state = await (await fetch(`${base}/api/state`)).json();
     assert.equal(state.jobs[0].assessment.status, 'To verify');
     assert.equal(state.jobs[0].facts.company.value, 'Fresh Co');
+    assert.equal(state.jobs[0].peopleSearch.eligible, true);
+    await post('/jobs/discovered', { jobs: [{ url: state.jobs[0].url, title: 'UX Designer', company: 'Fresh Co', location: 'India', recency: '2 hours ago' }] });
+    const refreshedJobs = (await (await fetch(`${base}/api/state`)).json()).jobs;
+    assert.equal(refreshedJobs.filter(item=>item.id===state.jobs[0].id).length,1);
+    assert.equal(refreshedJobs[0].sourceRecency,'2 hours ago');
+    assert.ok(refreshedJobs[0].observedAt);
     const originalJob = state.jobs.find(item => item.url === 'https://example.com/jobs/1');
     assert.equal((await post('/jobs/' + originalJob.id + '/facts', { facts: { company: { value: 'Example', evidence: 'Example company' } } })).status, 200);
     const recentJobs = [{ url: 'https://www.linkedin.com/jobs/view/1234567890/', title: 'UX Designer', company: 'Fresh Co', location: 'India', recency: '1 hour ago' }];
     const people = [{ name: 'Asha Rao', headline: 'Recruiter at Fresh Co', location: 'Bengaluru', degree: '2', company: 'Fresh Co', jobUrl: recentJobs[0].url, profileUrl: 'https://www.linkedin.com/in/asha-rao/?trk=search' }];
     assert.equal((await post('/people/import', { people, jobs: [{ ...recentJobs[0], recency: '3 days ago' }], replace: false })).status, 400);
     assert.equal((await post('/people/import', { people: [{ ...people[0], jobUrl: 'https://www.linkedin.com/jobs/view/999/' }], jobs: recentJobs, replace: false })).status, 400);
-    assert.equal((await post('/people/import', { people: [{ ...people[0], company: 'Unrelated Co' }], jobs: recentJobs, replace: false })).status, 400);
+    assert.equal((await (await post('/people/import', { people: [{ ...people[0], company: 'Unrelated Co' }], jobs: recentJobs, replace: false })).json()).added, 0);
     assert.equal((await post('/people/import', { people, jobs: recentJobs, replace: false })).status, 200);
     const peopleState = await (await fetch(`${base}/api/state`)).json();
     assert.equal(peopleState.contacts.length, 1); assert.equal(peopleState.contacts[0].name, 'Asha Rao'); assert.ok(peopleState.contacts[0].message.length <= 290);
@@ -87,9 +93,12 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     assert.equal(independentContact.jobId,''); assert.doesNotMatch(independentContact.message,/opening|refer me/);
     const target=await (await post(`/jobs/${peopleState.jobs.find(job=>job.facts.company.value==='Fresh Co').id}/people-search`,{})).json();
     assert.equal(target.job.company,'Fresh Co'); assert.ok(target.job.verifiedJobId);
-    const targetedPerson={...people[0],name:'Targeted Designer',headline:'UX Designer',profileUrl:'https://www.linkedin.com/in/targeted-designer/'};
+    const targetedPerson={...people[0],name:'Targeted Designer',headline:'UX Designer at Fresh Co',profileUrl:'https://www.linkedin.com/in/targeted-designer/'};
     const targeted=await (await post('/people/import',{people:[targetedPerson],jobs:[target.job],targeted:true})).json();
     assert.equal(targeted.added,1);
+    const former = {...targetedPerson,profileUrl:'https://www.linkedin.com/in/former-only/',headline:'UX Designer at Other | Ex-Fresh Co',companyVerified:true};
+    const rejected = await (await post('/people/import',{people:[former],jobs:[target.job],targeted:true})).json();
+    assert.equal(rejected.added,0);
   } finally {
     child.kill();
     await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));

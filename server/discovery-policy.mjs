@@ -10,3 +10,5 @@ export function withinCompanyQuota(person, people) {
   const role = contactRole(person.headline);
   return !!role && people.filter(item => String(item.company).trim().toLowerCase() === String(person.company).trim().toLowerCase() && contactRole(item.headline) === role).length < 2;
 }
+import '../chrome-extension/employment.js';
+export const currentEmployment = globalThis.outreachCurrentEmployment;

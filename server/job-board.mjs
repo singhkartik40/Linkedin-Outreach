@@ -33,12 +33,22 @@ export function normalizeBoardJobs(name, data, now = Date.now()) {
     return [{ url, text, facts, assessment: evaluateJob(facts), extraction: 'public_job_feed', sourceName: name, employmentType: 'Full-time', publishedAt: new Date(postedAt).toISOString(), fetchedAt: new Date(now).toISOString(), sourceRecency: new Date(postedAt).toISOString() }];
   });
 }
-export function jobSnapshot(job, now = Date.now()) {
-  const age = job.publishedAt ? (now - Date.parse(job.publishedAt)) / 60000 : (recentJobMinutes(job.sourceRecency) ?? Infinity) + (now - Date.parse(job.createdAt)) / 60000;
+export function jobSearchEligibility(job, now = Date.now()) {
+  const age = job.publishedAt ? (now - Date.parse(job.publishedAt)) / 60000 : (recentJobMinutes(job.sourceRecency) ?? Infinity) + (now - Date.parse(job.observedAt || job.createdAt)) / 60000;
   const title = job.facts.title?.value, company = job.facts.company?.value;
   const fullTime = job.employmentType === 'Full-time' || job.extraction === 'visible_linkedin_search' || /\bfull[ -]time\b/i.test(job.text || '');
-  if (!title || !company || !fullTime || age < 0 || age >= 1440 || !eligibleDesignJob({ title, source: job.employmentType || '' })) throw Error('Choose a verified full-time design job posted within the last 24 hours. Refresh jobs to find a newer role.');
-  return { url: job.url, title, company, location: job.facts.location?.value || '', recency: `${Math.floor(age)} minutes ago`, source: 'Full-time', sourceName: job.sourceName || 'LinkedIn', verifiedJobId: job.id };
+  let reason = '';
+  if (!title || !company) reason = 'Job title or company needs verification.';
+  else if (!eligibleDesignJob({ title, source: job.employmentType || '' })) reason = 'This role is not a full-time design role (internships and contracts are excluded).';
+  else if (!fullTime) reason = 'Full-time status needs verification on the original listing.';
+  else if (!Number.isFinite(age) || age < 0) reason = 'Posting time is unverified. Scan recent LinkedIn jobs for fresh evidence.';
+  else if (age >= 1440) reason = `Posted about ${Math.floor(age / 60)} hours ago — outside your 24-hour outreach window. Scan recent LinkedIn jobs for newer roles.`;
+  return { eligible: !reason, reason, ageMinutes: Number.isFinite(age) && age >= 0 ? age : null };
+}
+export function jobSnapshot(job, now = Date.now()) {
+  const eligibility = jobSearchEligibility(job, now);
+  if (!eligibility.eligible) throw Error(eligibility.reason);
+  return { url: job.url, title: job.facts.title.value, company: job.facts.company.value, location: job.facts.location?.value || '', recency: `${Math.floor(eligibility.ageMinutes)} minutes ago`, source: 'Full-time', sourceName: job.sourceName || 'LinkedIn', verifiedJobId: job.id };
 }
 export function createJobBoard(store, fetcher = fetch) {
   let active;

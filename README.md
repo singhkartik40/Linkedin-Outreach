@@ -69,7 +69,7 @@ The helper lets the app open LinkedIn, find people, and fill in a message.
 2. Turn on **Developer mode**.
 3. Click **Load unpacked**.
 4. Select the project's **chrome-extension** folder.
-5. Check that **Outreach Desk LinkedIn Helper v0.6.0** is enabled.
+5. Check that **Outreach Desk LinkedIn Helper v0.6.1** is enabled.
 6. Refresh the Outreach Desk page.
 
 **Already installed?** Click the helper's **Reload** button, then refresh Outreach Desk. You do not need to remove and install it again.
@@ -238,4 +238,14 @@ Click **Find 4 people for this job** to search only that company: up to **2 desi
 3. The helper opens each profile and checks the visible name, current founder role, company and Indian location.
 4. Verified contacts appear in **Founders & co-founders** with a design pitch, portfolio and résumé links. No job or funding claim is invented.
 
-Reload helper **v0.6.0** in Chrome and allow its access to **Google Search** as well as LinkedIn. If Google asks for verification or LinkedIn asks you to sign in, complete that yourself and retry. Empty or blocked results are reported; the app cannot guarantee 20 matches.
+Reload helper **v0.6.1** in Chrome and allow its access to **Google Search** as well as LinkedIn. If Google asks for verification or LinkedIn asks you to sign in, complete that yourself and retry. Empty or blocked results are reported; the app cannot guarantee 20 matches.
+
+
+### What changed in v0.6.1
+
+- In Job research, choose **Ready for outreach** to see roles that meet the 24-hour contact-search rule. Older jobs stay available to read, but their contact-search button explains why it is unavailable.
+- **Refresh job feeds** checks Jobicy and Remotive (with their existing cache). **Scan recent LinkedIn jobs** starts a fresh Chrome scan and finds contacts too.
+- A person must have an explicit current role at the hiring company. A past-company mention or search keyword alone does not qualify. Older drafts without current-company evidence show a warning and cannot be sent; a new scan can recheck them.
+- Draft messages use varied, polite wording for designers, recruiters and founders. Both links remain intact within 290 characters. Existing unsent drafts are updated once, with their previous wording kept in message history. Completed and skipped contacts stay unchanged.
+
+Reload the Chrome helper to **v0.6.1**, then refresh the dashboard.

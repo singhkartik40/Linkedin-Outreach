@@ -2,6 +2,16 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { buildOutreachMessage, refreshDraftMessages, portfolioUrl, resumeUrl, requiredPhrase } from '../server/outreach-message.mjs';
 
+test('polite wording varies per recipient and keeps role-specific requests', () => {
+  const messages = ['Asha','Samir','Jane','Kartik','Ira','Nandini'].map(name => buildOutreachMessage({name,company:'Acme',jobTitle:'UX Designer',headline:'UX Designer at Acme'}));
+  const bodies = messages.map(message => message.replace(/^Hi [^,]+, /, ''));
+  assert.ok(new Set(bodies).size >= 3);
+  for (const message of messages) { assert.ok(message.length<=290); assert.ok(message.includes(portfolioUrl)); assert.ok(message.includes(resumeUrl)); }
+  const recruiter = buildOutreachMessage({name:'Jane',company:'Acme',jobTitle:'UX Designer',headline:'Recruiter at Acme'});
+  assert.match(recruiter,/profile|background|consideration/);
+  assert.doesNotMatch(recruiter,/referral|pitch/);
+});
+
 test('full invitation includes intact portfolio and resume links within 290 characters', () => {
   for (const contact of [
     { name: "God's Sheril", company: 'ServiceNow', jobTitle: 'Senior Product Designer, dCX Design' },
@@ -11,8 +21,8 @@ test('full invitation includes intact portfolio and resume links within 290 char
     assert.ok(message.length <= 290);
     assert.ok(message.includes(portfolioUrl));
     assert.ok(message.includes(resumeUrl));
-    assert.ok(message.includes(requiredPhrase));
-    assert.ok(message.includes('Could you refer me?'));
+    assert.match(message, /guidance|referral|brief chat/);
+    assert.doesNotMatch(message, /Could you refer me\?/);
   }
 });
 

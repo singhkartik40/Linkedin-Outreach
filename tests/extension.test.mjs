@@ -162,12 +162,20 @@ test('people scanner reads current LinkedIn profile cards', () => {
   };
   const document = { querySelectorAll: selector => selector.startsWith('a[componentkey') ? [card] : [] };
   const context = { document, location: { href: 'https://www.linkedin.com/search/results/people/' }, URL, Map, chrome: { runtime: { onMessage: { addListener() {} } } } };
+  runInNewContext(readFileSync(new URL('../chrome-extension/employment.js', import.meta.url), 'utf8'), context);
   runInNewContext(source + '\nthis.found = collect("Acme", false); this.optionName = companyOptionName({ innerText: "ServiceNow\\nSoftware Development", querySelector: () => null });', context);
   assert.equal(context.found.length, 1);
   assert.equal(context.found[0].name, 'Jane Doe');
   assert.equal(context.found[0].headline, 'Recruiter at Acme');
   assert.equal(context.found[0].degree, '2');
   assert.equal(context.optionName, 'ServiceNow');
+  card.innerText = 'Jane Doe\n • 2nd\nRecruiter at Other\nIndia\nPast: Recruiter at Acme';
+  runInNewContext('this.found = collect("Acme", true);', context);
+  assert.equal(context.found.length, 0, 'even a company-filtered page cannot turn past experience into current employment');
+  card.innerText = 'Jane Doe\n • 2nd\nRecruiter\nIndia\nCurrent: Recruiter at Acme';
+  runInNewContext('this.found = collect("Acme", false);', context);
+  assert.equal(context.found.length, 1);
+  assert.equal(context.found[0].currentEmploymentEvidence, 'Current: Recruiter at Acme');
 });
 
 test('job card collector trusts the active past-day filter when a viewed card hides its age', () => {
@@ -181,6 +189,7 @@ test('job card collector trusts the active past-day filter when a viewed card hi
     querySelector(selector) { return selector === 'p' ? { innerText: 'Product Designer\nProduct Designer' } : null; },
   };
   const context = { document: { querySelectorAll() { return [card]; } }, URL, location: { href: 'https://www.linkedin.com/jobs/search-results/?f_TPR=r86400' }, chrome: { runtime: { onMessage: { addListener() {} } } } };
+  runInNewContext(readFileSync(new URL('../chrome-extension/employment.js', import.meta.url), 'utf8'), context);
   runInNewContext(source + '\nthis.found = collect({ city: "Delhi" });', context);
   assert.equal(context.found.length, 1);
   assert.equal(context.found[0].url, 'https://www.linkedin.com/jobs/view/4481910908/');

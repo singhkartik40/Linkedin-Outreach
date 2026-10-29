@@ -1,6 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { eligibleDesignJob, withinCompanyQuota, explicitlyFormerEmployee } from '../server/discovery-policy.mjs';
+import { eligibleDesignJob, withinCompanyQuota, explicitlyFormerEmployee, currentEmployment } from '../server/discovery-policy.mjs';
+
+test('current employer requires role evidence, never a previous-company keyword', () => {
+  for (const headline of ['UX Designer at Acme', 'Talent Acquisition @ Acme', 'UX Designer at Acme | Ex Other']) assert.ok(currentEmployment({company:'Acme',headline}));
+  for (const headline of ['UX Designer at Other | Ex-Acme', 'Former UX Designer at Acme', 'Previously at Acme | Designer', 'Designer at Acme Labs', 'UX Designer', 'Worked at Acme', 'UX Designer at Metaverse']) assert.equal(currentEmployment({company:headline.includes('Metaverse')?'Meta':'Acme',headline}), '');
+  assert.ok(currentEmployment({company:'Acme',headline:'UX Designer',currentEmploymentEvidence:'Current: Product Designer at Acme'}));
+  assert.equal(currentEmployment({company:'Acme',headline:'UX Designer at Other',currentEmploymentEvidence:'Past: Product Designer at Acme'}),'');
+  assert.equal(currentEmployment({company:'Acme',headline:'UX Designer',companyVerified:true}),'');
+});
 
 test('explicit former-company headlines are excluded from current-employee discovery', () => {
   assert.equal(explicitlyFormerEmployee({ company: 'OneBanc', headline: 'Talent Acquisition @AdGrid | Ex-Urban Company | Ex-OneBanc' }), true);

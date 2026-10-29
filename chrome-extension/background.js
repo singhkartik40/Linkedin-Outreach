@@ -57,7 +57,7 @@ const scanPageFor = (scan, url) => scan.phase === 'jobs' && /^https:\/\/www\.lin
   : ['startups','google-founders'].includes(scan.phase) && url.startsWith('https://www.google.com/search?') ? 'google'
   : scan.phase === 'founder-profile' && url.startsWith('https://www.linkedin.com/in/') ? 'founder' : '';
 async function injectScanScript(tabId, page) {
-  await chrome.scripting.executeScript({ target: { tabId }, files: [page === 'jobs' ? 'jobs.js' : page === 'people' ? 'search.js' : 'discovery.js'] });
+  await chrome.scripting.executeScript({ target: { tabId }, files: page === 'people' ? ['employment.js', 'search.js'] : [page === 'jobs' ? 'jobs.js' : 'discovery.js'] });
   return chrome.tabs.sendMessage(tabId, { type: 'scan-probe' }).catch(() => null);
 }
 async function retryOrFail(tabId, scan, page, reason) {

@@ -1,5 +1,5 @@
 import { canonicalUrl, profileSlug } from './domain.mjs';
-import { contactRole, explicitlyFormerEmployee } from './discovery-policy.mjs';
+import { contactRole, explicitlyFormerEmployee, currentEmployment } from './discovery-policy.mjs';
 import { isIndianLocation } from './locations.mjs';
 import { buildOutreachMessage } from './outreach-message.mjs';
 import { randomUUID } from 'node:crypto';
@@ -7,6 +7,7 @@ const clean = value => String(value || '').replace(/\s+/g, ' ').trim().slice(0, 
 export function founderFromDiscovery(person) {
   const name = clean(person.name), company = clean(person.company), headline = clean(person.headline), location = clean(person.location);
   const evidence = clean(person.evidence);
+  if (!currentEmployment(person)) throw Error('Founder current employment needs explicit evidence.');
   if (/\b(?:former|previous|ex)[ -]+(?:co[ -]?)?founder\b/i.test(headline)) throw Error('Former founder roles are not current founder evidence.');
   const words = company.toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(word => word.length > 2 && !['private','limited','technologies','india'].includes(word));
   const profileUrl = canonicalUrl(person.profileUrl), sourceUrl = canonicalUrl(person.startupSourceUrl), googleUrl = canonicalUrl(person.googleUrl);

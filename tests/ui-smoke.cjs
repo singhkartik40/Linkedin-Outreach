@@ -26,6 +26,7 @@ const assert = require('node:assert/strict');
     await page.reload();
     await page.getByRole('button', { name: /Job research 1/ }).click();
     await page.getByRole('button', { name: /Unreviewed job post/ }).waitFor();
+    assert.equal(await page.getByRole('button', {name:'Find 4 people for this job',exact:true}).isEnabled(), false, 'unverified jobs cannot start a contact scan');
     await page.getByRole('button', { name: /Unreviewed job post/ }).click();
     await page.getByRole('button', { name: 'Review facts' }).click();
     await page.getByLabel('Company', { exact: true }).fill('Example company');
@@ -59,7 +60,7 @@ const assert = require('node:assert/strict');
       window.addEventListener('message', event => {
         if (event.source !== window || event.data?.source !== 'outreach-desk' || !['ping-helper', 'scan-people'].includes(event.data?.type)) return;
         const send = (type, payload) => window.postMessage({ source: 'outreach-desk-helper', type, payload }, location.origin);
-        window.postMessage({ source: 'outreach-desk-helper', requestId: event.data.requestId, ok: true, version: '0.6.0' }, location.origin);
+        window.postMessage({ source: 'outreach-desk-helper', requestId: event.data.requestId, ok: true, version: '0.6.1' }, location.origin);
         if (event.data.type === 'ping-helper') return;
         if (!event.data.payload.job && event.data.payload.mode !== 'all') throw new Error('Every full scan must include founders');
         setTimeout(() => send('people-scan-progress', { phase: 'jobs', percent: 30, detail: 'Checking 2 recent jobs', jobsFound: 1, peopleFound: 0 }), 60);
@@ -67,11 +68,11 @@ const assert = require('node:assert/strict');
         let discovery = {
           replace: false, cities: event.data.payload.cities,
           jobs: Array.from({length: 5}, (_, index) => ({ url: `https://www.linkedin.com/jobs/view/${9876543210 + index}/`, title: 'Product Designer', company: `Browser Test Co ${index}`, location: 'Bengaluru, India', recency: 'Posted 2 hours ago', source: 'Product Designer Browser Test Co India Posted 2 hours ago' })),
-          people: Array.from({ length: 20 }, (_, i) => ({ name: `Test Person ${i + 1}`, headline: i % 4 < 2 ? 'UX Designer' : 'Recruiter', location: 'Bengaluru, India', company: `Browser Test Co ${Math.floor(i / 4)}`, jobUrl: `https://www.linkedin.com/jobs/view/${9876543210 + Math.floor(i / 4)}/`, profileUrl: `https://www.linkedin.com/in/browser-test-person-${i + 1}/` })),
+          people: Array.from({ length: 20 }, (_, i) => ({ name: `Test Person ${i + 1}`, headline: `${i % 4 < 2 ? 'UX Designer' : 'Recruiter'} at Browser Test Co ${Math.floor(i / 4)}`, location: 'Bengaluru, India', company: `Browser Test Co ${Math.floor(i / 4)}`, jobUrl: `https://www.linkedin.com/jobs/view/${9876543210 + Math.floor(i / 4)}/`, profileUrl: `https://www.linkedin.com/in/browser-test-person-${i + 1}/` })),
         };
         if (event.data.payload.job) {
           const job=event.data.payload.job;
-          discovery={targeted:true,replace:false,cities:event.data.payload.cities,jobs:[job],people:Array.from({length:4},(_,i)=>({name:`Targeted Person ${i}`,headline:i<2?'UX Designer':'Recruiter',location:'Bengaluru, India',company:job.company,jobUrl:job.url,profileUrl:`https://www.linkedin.com/in/job-targeted-${i}/`}))};
+          discovery={targeted:true,replace:false,cities:event.data.payload.cities,jobs:[job],people:Array.from({length:4},(_,i)=>({name:`Targeted Person ${i}`,headline:`${i<2?'UX Designer':'Recruiter'} at ${job.company}`,location:'Bengaluru, India',company:job.company,jobUrl:job.url,profileUrl:`https://www.linkedin.com/in/job-targeted-${i}/`}))};
         }
         setTimeout(() => send('people-scan-batch', { ...discovery, people: discovery.people.slice(0, 4) }), 400);
         setTimeout(() => send('people-scan-results', discovery), 1800);
@@ -92,6 +93,8 @@ const assert = require('node:assert/strict');
     await scanPage.getByRole('status').filter({ hasText: 'added 20 new people' }).waitFor();
     assert.equal((await (await scanPage.request.get('http://127.0.0.1:14319/api/state')).json()).contacts.length, 20);
     await scanPage.getByRole('button', { name: /Job research/ }).click();
+    await scanPage.getByRole('button', {name:'Ready for outreach',exact:true}).click();
+    assert.equal(await scanPage.getByRole('button', {name:'Find 4 people for this job',exact:true}).first().isEnabled(),true);
     const directJob = scanPage.getByRole('link', { name: 'Open on LinkedIn ↗', exact: true }).first();
     assert.match(await directJob.getAttribute('href'), /^https:\/\/www\.linkedin\.com\/jobs\/view\/\d+\/?$/);
     assert.equal(await directJob.getAttribute('target'), '_blank');

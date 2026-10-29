@@ -1,8 +1,8 @@
 import { initialSchedule, claimSchedule, finishSchedule, INTERVAL } from './discovery-schedule.mjs';
-import { createJobBoard, jobSnapshot } from './job-board.mjs';
+import { createJobBoard, jobSnapshot, jobSearchEligibility } from './job-board.mjs';
 import { founderFromDiscovery } from './founder-discovery.mjs';
 import { beginOutreach, consumeOutreach } from './outreach-intents.mjs';
-import { eligibleDesignJob, withinCompanyQuota, contactRole, explicitlyFormerEmployee } from './discovery-policy.mjs';
+import { eligibleDesignJob, withinCompanyQuota, contactRole, currentEmployment } from './discovery-policy.mjs';
 import http from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
@@ -26,6 +26,10 @@ if (!store.get('fullNoteLinksMigrationV2')) {
   store.set('contacts', refreshDraftMessages(store.get('contacts', [])));
   store.set('fullNoteLinksMigrationV2', true);
 }
+if (!store.get('politeDraftsV061')) {
+  store.set('contacts', refreshDraftMessages(store.get('contacts', [])));
+  store.set('politeDraftsV061', true);
+}
 store.set('contacts', store.get('contacts', []).map(contact => ({ ...contact, messageVersions: (contact.messageVersions || []).map(version => ({ ...version, id: version.id || randomUUID() })) })));
 const google = createGoogle();
 let sheetWriter = createSheetWriter();
@@ -45,7 +49,7 @@ async function body(req) {
 if (!store.get('discoverySchedule')) store.set('discoverySchedule', initialSchedule());
 function publicState() {
   const provider = store.get('provider');
-  const jobs = store.jobs().map(job => ({ ...job, assessment: evaluateJob(job.facts) }));
+  const jobs = store.jobs().map(job => ({ ...job, assessment: evaluateJob(job.facts), peopleSearch: jobSearchEligibility(job) }));
   const tracker = store.get('tracker');
   const master = tracker?.valueRanges?.find(range => /^'?Master'?\!/.test(range.range))?.values || [];
   const headers = master[0] || [], column = name => headers.findIndex(value => String(value).trim().toLowerCase() === name.toLowerCase());
@@ -53,8 +57,9 @@ function publicState() {
   const contacts = store.get('contacts', []).map(contact => {
     const duplicate = tracker ? isDuplicate(contact, sheetRows) : false;
     const completed = ['Send confirmed', 'Sent'].includes(contact.status);
+    const employmentVerified = !!currentEmployment(contact);
     const sheetSyncStatus = completed ? contact.status === 'Sent' ? 'Verified in tracker' : 'Awaiting Sheet update' : null;
-    return { ...contact, message: String(contact.message || ''), sheetStatus: !tracker ? 'Tracker not connected' : duplicate ? 'Already in tracker' : 'Clear to contact', sheetSyncStatus, sheetCheckedAt: tracker?.syncedAt || null, outreachBlocked: !!contact.deletedAt || contact.status === 'Skipped' || completed || !tracker || duplicate };
+    return { ...contact, employmentVerified, message: String(contact.message || ''), sheetStatus: !tracker ? 'Tracker not connected' : duplicate ? 'Already in tracker' : 'Clear to contact', sheetSyncStatus, sheetCheckedAt: tracker?.syncedAt || null, outreachBlocked: !employmentVerified || !!contact.deletedAt || contact.status === 'Skipped' || completed || !tracker || duplicate };
   });
   const { valueRanges, ...trackerSummary } = tracker || {};
   return { jobBoardSources: store.get('jobBoardSources', {}), discoverySchedule: store.get('discoverySchedule'), provider: provider ? { ...provider, hasKey: !!keyFor(provider) } : null, google: { ...google.status(), writeConfigured: sheetWriter.configured() }, spreadsheetId: store.get('spreadsheetId', defaultSpreadsheetId), tracker: tracker ? trackerSummary : null, jobs, contacts, events: store.events(), sending: sendingCapability, automation: store.get('automation', { autoSync: false, desiredSending: 'automatic' }) };
@@ -181,7 +186,12 @@ const server = http.createServer(async (req, res) => {
         const title = String(item.title || '').trim().slice(0, 200), company = String(item.company || '').trim().slice(0, 160);
         if (!title || !company) continue;
         fresh += 1;
-        if (store.jobs().some(job => job.url === sourceUrl)) continue;
+        const existing = store.jobs().find(job => job.url === sourceUrl);
+        if (existing) {
+          const { id, url: savedUrl, createdAt, ...saved } = existing;
+          store.updateJob(id, { ...saved, sourceRecency: String(item.recency).trim().slice(0, 100), observedAt: new Date().toISOString() });
+          continue;
+        }
         const location = `${String(item.location || '').trim().slice(0, 160)}${item.country === 'India' && !/\bindia\b/i.test(item.location || '') ? ', India' : ''}`, sourceRecency = String(item.recency || '').trim().slice(0, 100);
         const text = `${title}\n${company}\n${location}\nLinkedIn search age: ${sourceRecency}\n${String(item.source || '').slice(0, 1200)}`;
         const raw = { title: { value: title, evidence: title }, company: { value: company, evidence: company }, location: location ? { value: location, evidence: location } : undefined };
@@ -265,10 +275,17 @@ const server = http.createServer(async (req, res) => {
       let added = 0;
       const accepted = [];
       for (const person of people) {
-        if (explicitlyFormerEmployee(person)) continue;
+        const currentEmploymentEvidence = currentEmployment(person);
+        if (!currentEmploymentEvidence) continue;
         const isFounder = contactRole(person.headline) === 'founder';
-        const contact = contactFromDiscovery({ ...person, funding: null }, jobs), slug = profileSlug(contact.profileUrl);
-        if ((!mixedMode && isFounder !== founderMode) || !slug || byProfile.has(slug) || !matchesContactToJobLocation(contact.jobLocation, contact.location) || !withinCompanyQuota(contact, accepted)) continue;
+        const contact = { ...contactFromDiscovery({ ...person, funding: null }, jobs), currentEmploymentEvidence, employmentCheckedAt: new Date().toISOString() }, slug = profileSlug(contact.profileUrl);
+        if ((!mixedMode && isFounder !== founderMode) || !slug || !matchesContactToJobLocation(contact.jobLocation, contact.location)) continue;
+        const existing = byProfile.get(slug);
+        if (existing) {
+          if (existing.status === 'Draft ready' && !existing.deletedAt && existing.company.toLowerCase() === contact.company.toLowerCase()) byProfile.set(slug, { ...existing, headline: contact.headline, currentEmploymentEvidence, employmentCheckedAt: contact.employmentCheckedAt });
+          continue;
+        }
+        if (!withinCompanyQuota(contact, accepted)) continue;
         accepted.push(contact);
         byProfile.set(slug, contact); added += 1;
       }

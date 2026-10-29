@@ -75,3 +75,12 @@ npm run build
 - `secrets.json`: scoped matches as file/line/rule only, with no matched secret values.
 
 An unavailable registry is reported as an incomplete audit, never as zero vulnerabilities. `npm run lint:security` prints the static findings directly.
+
+
+## 29 October 2026 — v0.6.1 matching and eligibility
+
+Current-employment matching now uses a shared parser in the extension and server. Past-company mentions, generic company-filter flags, ambiguous names and unrelated employer names cannot establish a match. Existing drafts lacking current-company evidence are blocked from preparing outreach until a scan supplies evidence. No additional browser permissions were added.
+
+The job-search gate rejects missing/invalid timestamps and exposes a specific eligibility reason to the board. Existing LinkedIn jobs retain their identity and reviewed facts while a rescan refreshes posting-age evidence. Message variants preserve both links and the 290-character limit, and replaced unsent drafts retain their prior versions.
+
+Validation: production build and 63 unit/API tests passed, including former-employer rejection, age boundaries, refresh deduplication and varied polite wording. The existing full-project static-analysis findings listed above have not been declared resolved.

@@ -17,12 +17,6 @@ const companyOptionName = item => clean(item.querySelector('p')?.innerText || it
 function visible(element) { return !!element && element.getClientRects().length > 0; }
 const degreeFrom = value => String(value || '').match(/\b([123])(?:st|nd|rd)(?:\+)?\b/i)?.[1] || 'Unknown';
 const degreeLine = value => String(value || '').length < 16 && /\b[123](?:st|nd|rd)(?:\+)?$/i.test(value);
-function companyWords(value) { return clean(value).toLowerCase().replace(/[^a-z0-9 ]/g, ' ').split(/\s+/).filter(word => word.length > 2 && !['private','limited','technologies','technology','solutions','india'].includes(word)); }
-function mentionsCompany(value, company) {
-  const text = clean(value).toLowerCase().replace(/[^a-z0-9 ]/g, ' ');
-  const words = companyWords(company);
-  return words.length > 0 && words.every(word => text.includes(word));
-}
 function collect(company, pageFiltered) {
   const modern = [...document.querySelectorAll('a[componentkey^="auto-component-"][href*="/in/"]')];
   const cards = [...document.querySelectorAll('li.reusable-search__result-container, li.artdeco-list__item, [data-view-name="search-entity-result-universal-template"]'), ...modern];
@@ -39,9 +33,9 @@ function collect(company, pageFiltered) {
     const location = clean(isModern ? lines[lines.findIndex(line => line === headline) + 1] : card.querySelector('.entity-result__secondary-subtitle')?.textContent);
     const degree = degreeFrom(isModern ? lines.slice(0, 2).join(' ') : card.querySelector('.entity-result__badge-text')?.textContent);
     if (!/founder|recruit|talent|human resources|\bhr\b|design|user experience/i.test(headline)) continue;
-    const companyVerified = pageFiltered || mentionsCompany(card.innerText, company);
-    if (!companyVerified) continue;
-    people.push({ name, headline, location, degree, profileUrl, companyVerified });
+    const currentEmploymentEvidence = globalThis.outreachCurrentEmployment({ headline, currentEmploymentEvidence: lines.filter(line => /^current\s*:/i.test(line)).join('\n') }, company);
+    if (!currentEmploymentEvidence) continue;
+    people.push({ name, headline, location, degree, profileUrl, companyVerified: true, currentEmploymentEvidence, employmentCheckedAt: new Date().toISOString() });
   }
   return [...new Map(people.map(person => [person.profileUrl.toLowerCase(), person])).values()];
 }
