@@ -22,6 +22,12 @@ test('targeted eligibility ages LinkedIn evidence and rejects invalid or expired
   for (const change of [{publishedAt:'invalid'}, {createdAt:'invalid'}, {publishedAt:new Date(now+60000).toISOString()}, {publishedAt:new Date(now-86400000).toISOString()}]) assert.equal(jobSearchEligibility({...saved,...change},now).eligible,false);
   assert.match(jobSearchEligibility({...refreshed,extraction:'manual'},now).reason,/Full-time/);
 });
+
+test('job feed refresh admits only explicitly India-based listings', () => {
+  const jobs = normalizeBoardJobs('Jobicy', {jobs:['India','Bengaluru, India','Brazil','United States','Worldwide','Remote'].map((jobGeo,i)=>({...job,jobGeo,url:`https://jobicy.com/jobs/${i}`}))},now);
+  assert.equal(jobs.length,2);
+  assert.ok(jobs.every(job=>job.facts.location.value.includes('India')));
+});
 test('board coalesces concurrent requests, deduplicates jobs, caches each feed and reports partial failures', async () => {
   const values={}, jobs=[]; let calls=0;
   const store={get:(key,fallback)=>values[key]??fallback,set:(key,value)=>values[key]=value,jobs:()=>jobs,addJob:(url,data)=>jobs.push({url,...data})};

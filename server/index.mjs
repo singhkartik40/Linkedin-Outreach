@@ -1,4 +1,5 @@
 import { initialSchedule, claimSchedule, finishSchedule, INTERVAL } from './discovery-schedule.mjs';
+import { companyOutreachLimit, repostedAfter } from './company-limit.mjs';
 import { createJobBoard, jobSnapshot, jobSearchEligibility } from './job-board.mjs';
 import { founderFromDiscovery } from './founder-discovery.mjs';
 import { beginOutreach, consumeOutreach } from './outreach-intents.mjs';
@@ -13,7 +14,7 @@ import { createGoogle } from './google.mjs';
 import { createSheetWriter } from './sheet-writer.mjs';
 import { buildOutreachMessage, refreshDraftMessages } from './outreach-message.mjs';
 import { changeContact, saveContactDraft } from './contact-actions.mjs';
-import { matchesCity, matchesContactToJobLocation } from './locations.mjs';
+import { matchesCity, matchesContactToJobLocation, isIndianLocation } from './locations.mjs';
 import { isLatestJob } from './recent-jobs.mjs';
 import { canonicalUrl, validateExtraction, evaluateJob, sendingCapability, isDuplicate, profileSlug, trackerConfirmsDelivery } from './domain.mjs';
 import { providerDefaults, validateProvider, generate, parseJson, extractionPrompt } from './providers.mjs';
@@ -49,17 +50,22 @@ async function body(req) {
 if (!store.get('discoverySchedule')) store.set('discoverySchedule', initialSchedule());
 function publicState() {
   const provider = store.get('provider');
-  const jobs = store.jobs().map(job => ({ ...job, assessment: evaluateJob(job.facts), peopleSearch: jobSearchEligibility(job) }));
   const tracker = store.get('tracker');
+  const savedContacts = store.get('contacts', []);
+  const jobs = store.jobs().filter(job => isIndianLocation(job.facts.location?.value || job.text)).map(job => {
+    const limit = companyOutreachLimit(job, tracker, savedContacts);
+    return { ...job, assessment: evaluateJob(job.facts), peopleSearch: limit.blocked ? { ...jobSearchEligibility(job), eligible: false, reason: limit.reason } : jobSearchEligibility(job) };
+  });
   const master = tracker?.valueRanges?.find(range => /^'?Master'?\!/.test(range.range))?.values || [];
   const headers = master[0] || [], column = name => headers.findIndex(value => String(value).trim().toLowerCase() === name.toLowerCase());
   const sheetRows = master.slice(1).map(row => ({ name: row[column('Person')] || '', profileUrl: row[column('Profile URL')] || '', status: row[column('Status')] || '' }));
-  const contacts = store.get('contacts', []).map(contact => {
+  const contacts = savedContacts.map(contact => {
+    const companyLimit = companyOutreachLimit(contact, tracker, savedContacts);
     const duplicate = tracker ? isDuplicate(contact, sheetRows) : false;
     const completed = ['Send confirmed', 'Sent'].includes(contact.status);
     const employmentVerified = !!currentEmployment(contact);
     const sheetSyncStatus = completed ? contact.status === 'Sent' ? 'Verified in tracker' : 'Awaiting Sheet update' : null;
-    return { ...contact, employmentVerified, message: String(contact.message || ''), sheetStatus: !tracker ? 'Tracker not connected' : duplicate ? 'Already in tracker' : 'Clear to contact', sheetSyncStatus, sheetCheckedAt: tracker?.syncedAt || null, outreachBlocked: !employmentVerified || !!contact.deletedAt || contact.status === 'Skipped' || completed || !tracker || duplicate };
+    return { ...contact, companyLimit, employmentVerified, message: String(contact.message || ''), sheetStatus: !tracker ? 'Tracker not connected' : duplicate ? 'Already in tracker' : 'Clear to contact', sheetSyncStatus, sheetCheckedAt: tracker?.syncedAt || null, outreachBlocked: companyLimit.blocked || !employmentVerified || !!contact.deletedAt || contact.status === 'Skipped' || completed || !tracker || duplicate };
   });
   const { valueRanges, ...trackerSummary } = tracker || {};
   return { jobBoardSources: store.get('jobBoardSources', {}), discoverySchedule: store.get('discoverySchedule'), provider: provider ? { ...provider, hasKey: !!keyFor(provider) } : null, google: { ...google.status(), writeConfigured: sheetWriter.configured() }, spreadsheetId: store.get('spreadsheetId', defaultSpreadsheetId), tracker: tracker ? trackerSummary : null, jobs, contacts, events: store.events(), sending: sendingCapability, automation: store.get('automation', { autoSync: false, desiredSending: 'automatic' }) };
@@ -80,6 +86,13 @@ function contactFromDiscovery(person, jobs) {
   return { contactRole: contactRole(person.headline), id: randomUUID(), jobId: job.id, jobUrl: job.url, jobTitle, jobLocation: String(job.facts?.location?.value || ''), jobRecency: job.sourceRecency || '', company: jobCompany, name, headline: String(person.headline || 'LinkedIn profile').replace(/\s+/g, ' ').trim(), location: String(person.location || 'Location not shown').replace(/\s+/g, ' ').trim(), profileUrl, degree: String(person.degree || 'Unknown'), connectionState: 'Needs live check', connectionCheckedAt: null, relevance: funding ? `Recent funding reported for ${jobCompany}; a current ${jobTitle} opening suggests an active design need.` : `Found in a LinkedIn people search for ${jobCompany} after the ${jobTitle} role was scanned.`, evidence: String(person.headline || `LinkedIn search result for ${name} at ${jobCompany}`).replace(/\s+/g, ' ').trim(), funding, message, status: 'Draft ready', researchedAt: now };
 }
 let syncActive = false;
+let trackerCheck;
+async function ensureFreshTracker() {
+  const age = Date.now() - Date.parse(store.get('tracker')?.syncedAt || '');
+  if (Number.isFinite(age) && age >= 0 && age < 5 * 60000) return;
+  trackerCheck ||= syncTracker().finally(() => { trackerCheck = null; });
+  try { await trackerCheck; } catch { throw Error('Could not refresh the tracker. Retry Refresh tracker before starting outreach.'); }
+}
 async function syncTracker() {
   if (syncActive) throw new Error('A tracker refresh is already running.');
   syncActive = true;
@@ -127,20 +140,26 @@ const server = http.createServer(async (req, res) => {
   if (req.headers.origin && !allowedOrigins.has(req.headers.origin)) return reply(res, 403, { error: 'Origin not allowed.' });
   if (url.pathname.startsWith('/api/') && !['GET', 'HEAD'].includes(req.method) && !allowedOrigins.has(req.headers.origin)) return reply(res, 403, { error: 'Open the local app to make changes.' });
   try {
+    if (url.pathname === '/api/health' && req.method === 'GET') return reply(res, 200, { app: 'outreach-desk', ready: true });
     if (url.pathname === '/api/state' && req.method === 'GET') return reply(res, 200, publicState());
     if (url.pathname === '/api/job-board/sync' && req.method === 'POST') return reply(res, 200, await jobBoard.sync());
     if (/^\/api\/jobs\/[\w-]+\/people-search$/.test(url.pathname) && req.method === 'POST') {
+      await ensureFreshTracker();
       const job = store.jobs().find(item => item.id === url.pathname.split('/')[3]);
       if (!job) return reply(res, 404, { error: 'Job not found.' });
+      if (!isIndianLocation(job.facts.location?.value)) throw Error('Job discovery is set to India only.');
+      const limit = companyOutreachLimit(job, store.get('tracker'), store.get('contacts', []));
+      if (limit.blocked) throw Error(limit.reason);
       return reply(res, 200, { job: jobSnapshot(job) });
     }
     if (url.pathname === '/api/founders/import' && req.method === 'POST') {
+      await ensureFreshTracker();
       const input = await body(req), current = store.get('contacts', []), known = new Set(current.map(contact => profileSlug(contact.profileUrl)));
       let added = 0, rejected = 0;
       for (const person of (Array.isArray(input.people) ? input.people : []).slice(0, 20)) {
         let contact; try { contact = founderFromDiscovery(person); } catch { rejected++; continue; }
         const slug = profileSlug(contact.profileUrl);
-        if (known.has(slug) || current.filter(item => item.company.toLowerCase() === contact.company.toLowerCase() && item.contactRole === 'founder').length >= 2) continue;
+        if (companyOutreachLimit(contact, store.get('tracker'), current).blocked || known.has(slug) || current.filter(item => item.company.toLowerCase() === contact.company.toLowerCase() && item.contactRole === 'founder').length >= 2) continue;
         current.push(contact); known.add(slug); added++;
       }
       store.set('contacts', current);
@@ -179,7 +198,7 @@ const server = http.createServer(async (req, res) => {
       const input = await body(req), discovered = Array.isArray(input.jobs) ? input.jobs.slice(0, 60) : [];
       let added = 0, fresh = 0;
       for (const item of discovered) {
-        if (!isLatestJob(item) || !eligibleDesignJob(item) || !matchesCity(item.location, input.cities, item.country, item.searchLocation)) continue;
+        if (!isLatestJob(item) || !eligibleDesignJob(item) || !(item.country === 'India' || isIndianLocation(item.location)) || !matchesCity(item.location, input.cities, item.country, item.searchLocation)) continue;
         let sourceUrl;
         try { sourceUrl = canonicalUrl(item.url); } catch { continue; }
         if (!/^https:\/\/(?:[a-z]+\.)?linkedin\.com\/jobs\/view\/\d+/i.test(sourceUrl)) continue;
@@ -239,8 +258,10 @@ const server = http.createServer(async (req, res) => {
       return reply(res, 200, await syncCompletedContact(id));
     }
     if (/^\/api\/contacts\/[\w-]+\/prepare$/.test(url.pathname) && req.method === 'POST') {
+      await ensureFreshTracker();
       const id = url.pathname.split('/')[3], contact = publicState().contacts.find(item => item.id === id);
       if (!contact) return reply(res, 404, { error: 'Contact not found.' });
+      if (contact.companyLimit.blocked) throw new Error(contact.companyLimit.reason);
       if (contact.outreachBlocked) throw new Error('This contact is not clear for outreach. Refresh the tracker and check the contact.');
       return reply(res, 200, { receiptToken: beginOutreach(contact) });
     }
@@ -260,6 +281,7 @@ const server = http.createServer(async (req, res) => {
       return reply(res, 200, await syncCompletedContact(id));
     }
     if (url.pathname === '/api/people/import' && req.method === 'POST') {
+      await ensureFreshTracker();
       const input = await body(req), people = Array.isArray(input.people) ? input.people.slice(0, 50) : [];
       if (!people.length) return reply(res, 200, { saved: true, added: 0, total: store.get('contacts', []).length });
       const freshUrls = new Set((Array.isArray(input.jobs) ? input.jobs : []).filter(item => {
@@ -267,7 +289,7 @@ const server = http.createServer(async (req, res) => {
         return isLatestJob(item) && eligibleDesignJob(item) && matchesCity(item.location, input.cities, item.country, item.searchLocation);
       }).map(item => { try { return canonicalUrl(item.url); } catch { return ''; } }).filter(Boolean));
       if (!freshUrls.size) throw new Error('No visibly recent jobs were supplied with this scan. No people were imported.');
-      const jobs = store.jobs().filter(job => freshUrls.has(job.url)), current = store.get('contacts', []);
+      const jobs = store.jobs().filter(job => freshUrls.has(job.url) && isIndianLocation(job.facts.location?.value || job.text)), current = store.get('contacts', []);
       const founderMode = input.mode === 'founders';
       const mixedMode = input.mode === 'all';
       const preserved = input.replace ? current.filter(contact => (!mixedMode && (contactRole(contact.headline) === 'founder') !== founderMode) || contact.deletedAt || ['Sent', 'Send confirmed', 'Skipped'].includes(contact.status)) : current;
@@ -278,7 +300,9 @@ const server = http.createServer(async (req, res) => {
         const currentEmploymentEvidence = currentEmployment(person);
         if (!currentEmploymentEvidence) continue;
         const isFounder = contactRole(person.headline) === 'founder';
-        const contact = { ...contactFromDiscovery({ ...person, funding: null }, jobs), currentEmploymentEvidence, employmentCheckedAt: new Date().toISOString() }, slug = profileSlug(contact.profileUrl);
+        const matchedJob = jobs.find(job => job.url === canonicalUrl(person.jobUrl));
+        const contact = { ...contactFromDiscovery({ ...person, funding: null }, jobs), postingRepostedAfter: matchedJob ? repostedAfter(matchedJob) : 0, currentEmploymentEvidence, employmentCheckedAt: new Date().toISOString() }, slug = profileSlug(contact.profileUrl);
+        if (companyOutreachLimit(contact, store.get('tracker'), current).blocked) continue;
         if ((!mixedMode && isFounder !== founderMode) || !slug || !matchesContactToJobLocation(contact.jobLocation, contact.location)) continue;
         const existing = byProfile.get(slug);
         if (existing) {
@@ -313,7 +337,8 @@ const server = http.createServer(async (req, res) => {
     if (url.pathname === '/api/discovery-schedule' && req.method === 'POST') {
       const input = await body(req), schedule = store.get('discoverySchedule', initialSchedule());
       if (input.action === 'claim') {
-        const next = claimSchedule(schedule, input.automatic === true);
+        await ensureFreshTracker();
+        const next = claimSchedule(store.get('discoverySchedule', initialSchedule()), input.automatic === true);
         if (next) store.set('discoverySchedule', next);
         return reply(res, 200, { claimed: !!next, runId: next?.runId });
       }
@@ -354,6 +379,9 @@ const timer = setInterval(async () => {
 }, 5 * 60 * 60 * 1000);
 timer.unref();
 if (port === 4318) {
+  void ensureFreshTracker().catch(() => {});
+  const trackerTimer = setInterval(() => { void ensureFreshTracker().catch(() => {}); }, 5 * 60000);
+  trackerTimer.unref();
   const boardTimer = setInterval(() => { void jobBoard.sync().catch(() => {}); }, 6 * 3600000);
   boardTimer.unref();
   void jobBoard.sync().catch(() => {});

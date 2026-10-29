@@ -28,6 +28,7 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
   writeFileSync(backgroundPath, readFileSync(backgroundPath, 'utf8').replace('http://127.0.0.1:4318', 'http://127.0.0.1:14320'));
   const manifestPath = path.join(extension, 'manifest.json');
   writeFileSync(manifestPath, readFileSync(manifestPath, 'utf8').replaceAll('127.0.0.1:4318', '127.0.0.1:14320'));
+  (await import('./fixture-store.mjs')).seedTracker(path.join(dir, 'data'));
   const server = spawn(process.execPath, ['server/index.mjs'], { env: { ...process.env, PORT: '14320', DATA_DIR: path.join(dir, 'data') }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let context;
   try {

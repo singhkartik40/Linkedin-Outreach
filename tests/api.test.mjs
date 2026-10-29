@@ -1,3 +1,5 @@
+import { seedTracker } from './fixture-store.mjs';
+import { createStore } from '../server/store.mjs';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { spawn } from 'node:child_process';
@@ -7,6 +9,7 @@ import path from 'node:path';
 import http from 'node:http';
 test('local API guards, import lifecycle, key redaction, and sending gate', async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'outreach-api-'));
+  seedTracker(dir);
   const port = 14318, base = `http://127.0.0.1:${port}`;
   const child = spawn(process.execPath, ['server/index.mjs'], { env: { ...process.env, PORT: String(port), DATA_DIR: dir }, stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
   try {
@@ -99,6 +102,18 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     const former = {...targetedPerson,profileUrl:'https://www.linkedin.com/in/former-only/',headline:'UX Designer at Other | Ex-Fresh Co',companyVerified:true};
     const rejected = await (await post('/people/import',{people:[former],jobs:[target.job],targeted:true})).json();
     assert.equal(rejected.added,0);
+    const fixture = createStore(dir);
+    fixture.set('tracker', {syncedAt:new Date(Date.now()-1000).toISOString(),valueRanges:[{range:"'Master'!A:ZZ",values:[['Person','Company','Profile URL','Status','Job / funding source','Sent on (IST)'],...Array.from({length:5},(_,i)=>[`Prior ${i}`,'Fresh Co',`https://www.linkedin.com/in/prior-${i}/`,'Sent',target.job.url,new Date(Date.now()-86400000).toISOString()])]}]});
+    fixture.close();
+    const capped = (await (await fetch(`${base}/api/state`)).json()).contacts.find(c=>c.name==='Targeted Designer');
+    assert.equal(capped.companyLimit.blocked,true);
+    const cappedResponse = await post(`/contacts/${capped.id}/prepare`,{});
+    assert.equal(cappedResponse.status,400, JSON.stringify({response:await cappedResponse.json(),tracker:(await (await fetch(`${base}/api/state`)).json()).tracker,limit:capped.companyLimit}));
+    assert.equal((await post(`/jobs/${target.job.verifiedJobId}/people-search`,{})).status,400);
+    const cappedImport = await (await post('/people/import',{people:[{...targetedPerson,profileUrl:'https://www.linkedin.com/in/sixth-person/'}],jobs:recentJobs})).json();
+    assert.equal(cappedImport.added,0);
+    await post('/jobs/discovered',{jobs:[{...recentJobs[0],recency:'Reposted 1 hour ago'}]});
+    assert.equal((await post(`/jobs/${target.job.verifiedJobId}/people-search`,{})).status,200);
   } finally {
     child.kill();
     await new Promise(resolve => child.exitCode !== null ? resolve() : child.once('exit', resolve));

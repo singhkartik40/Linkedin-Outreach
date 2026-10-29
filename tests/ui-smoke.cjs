@@ -7,6 +7,7 @@ const path = require('node:path');
 const assert = require('node:assert/strict');
 (async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'outreach-ui-'));
+  (await import('./fixture-store.mjs')).seedTracker(dir);
   const server = spawn(process.execPath, ['server/index.mjs'], { env: { ...process.env, PORT: '14319', DATA_DIR: dir }, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
   let browser;
   try {

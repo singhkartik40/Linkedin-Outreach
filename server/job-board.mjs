@@ -1,6 +1,7 @@
 import { canonicalUrl, validateExtraction, evaluateJob } from './domain.mjs';
 import { eligibleDesignJob } from './discovery-policy.mjs';
 import { recentJobMinutes } from './recent-jobs.mjs';
+import { isIndianLocation } from './locations.mjs';
 
 export const boardSources = [
   { name: 'Jobicy', url: 'https://jobicy.com/api/jobs?count=200&tag=design', delay: 'Listings delayed by 3 hours' },
@@ -27,6 +28,7 @@ export function normalizeBoardJobs(name, data, now = Date.now()) {
     let url; try { url = canonicalUrl(item.url); } catch { return []; }
     if (new URL(url).protocol !== 'https:' || !(isJobicy ? /^https:\/\/jobicy\.com\/jobs\// : /^https:\/\/remotive\.com\/remote-jobs\//).test(url)) return [];
     const location = clean(isJobicy ? item.jobGeo : item.candidate_required_location) || 'Remote — eligibility not stated';
+    if (!isIndianLocation(location)) return [];
     const text = `${title}\n${company}\n${location}\nFull-time\n${new Date(postedAt).toISOString()}\n${clean(isJobicy ? item.jobDescription : item.description).slice(0, 18000)}`;
     const raw = Object.fromEntries(Object.entries({ title, company, location, postedAt: new Date(postedAt).toISOString() }).map(([key, value]) => [key, { value, evidence: value }]));
     const facts = validateExtraction(raw, text);

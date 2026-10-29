@@ -114,7 +114,7 @@ Run this once from a terminal in the project folder:
 powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\install-outreach-startup.ps1
 ```
 
-It creates a Windows task named **Outreach Desk**. You still need to open the dashboard in Chrome. To turn this off, disable the task in Windows Task Scheduler.
+It creates and starts a Windows task named **Outreach Desk** under your own Windows account. The app starts quietly after sign-in, also works on battery, and restarts if its server exits. Bookmark http://127.0.0.1:4318/ in Chrome and open it whenever you need it. No daily batch file or Codex window is needed. To turn automatic startup off, disable the task in Windows Task Scheduler. Keep this project folder in its current location.
 
 </details>
 
@@ -249,3 +249,14 @@ Reload helper **v0.6.1** in Chrome and allow its access to **Google Search** as 
 - Draft messages use varied, polite wording for designers, recruiters and founders. Both links remain intact within 290 characters. Existing unsent drafts are updated once, with their previous wording kept in message history. Completed and skipped contacts stay unchanged.
 
 Reload the Chrome helper to **v0.6.1**, then refresh the dashboard.
+
+
+### India jobs and company outreach limits (v0.6.2)
+
+Job research now shows India-based roles only. Feed entries labelled only Worldwide or Remote are left out until India eligibility is explicit.
+
+The tracker is refreshed on startup, before scans and outreach preparation when its copy is more than five minutes old, and in the background every five minutes. If a required refresh fails, a new scan/send preparation stops with an explanation.
+
+Five distinct people marked Sent, Invitation pending or otherwise confirmed reached for a company and posting is the limit. Confirmed local sends count too, including Sheet writes still pending. Extra drafts move out of Active into **Company limit**; they are not deleted. Separate known job links are separate postings. Historical rows without a job link count conservatively against the company. An explicit repost with a timestamp newer than the old sends allows a new round; refreshing the page alone never resets the count. Historical sends without dates remain counted. The same individual is still protected from duplicate outreach across postings.
+
+The Chrome helper remains v0.6.1 for this update; refresh the dashboard only.
