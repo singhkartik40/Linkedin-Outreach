@@ -145,6 +145,8 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     const targetedPerson={...people[0],name:'Targeted Designer',headline:'UX Designer at Fresh Co',profileUrl:'https://www.linkedin.com/in/targeted-designer/'};
     const targeted=await (await post('/people/import',{people:[targetedPerson],jobs:[target.job],targeted:true})).json();
     assert.equal(targeted.added,1);
+    await post('/people/import',{people,jobs:recentJobs,replace:true});
+    assert.ok((await (await fetch(`${base}/api/state`)).json()).contacts.some(c=>c.name==='Targeted Designer'), 'refresh preserves existing unsent contacts');
     const former = {...targetedPerson,profileUrl:'https://www.linkedin.com/in/former-only/',headline:'UX Designer at Other | Ex-Fresh Co',companyVerified:true};
     const rejected = await (await post('/people/import',{people:[former],jobs:[target.job],targeted:true})).json();
     assert.equal(rejected.added,0);

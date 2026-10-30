@@ -300,9 +300,9 @@ const server = http.createServer(async (req, res) => {
       }).map(item => { try { return canonicalUrl(item.url); } catch { return ''; } }).filter(Boolean));
       if (!freshUrls.size) throw new Error('No visibly recent jobs were supplied with this scan. No people were imported.');
       const jobs = store.jobs().filter(job => freshUrls.has(job.url) && isIndianLocation(job.facts.location?.value || job.text)), current = store.get('contacts', []);
-      const founderMode = input.mode === 'founders';
-      const mixedMode = input.mode === 'all';
-      const preserved = input.replace ? current.filter(contact => (!mixedMode && (contactRole(contact.headline) === 'founder') !== founderMode) || contact.deletedAt || ['Sent', 'Send confirmed', 'Skipped'].includes(contact.status)) : current;
+      const founderMode = input.mode === 'founders', mixedMode = input.mode === 'all';
+      // Discovery always appends. A refresh must never remove saved drafts or history.
+      const preserved = current;
       const byProfile = new Map(preserved.map(contact => [profileSlug(contact.profileUrl), contact]));
       let added = 0;
       const accepted = [];

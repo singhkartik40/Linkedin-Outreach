@@ -9,17 +9,18 @@ test('job board preserves evidence, source and exact age and excludes interns, p
   const jobs = normalizeBoardJobs('Jobicy', { jobs: [job, {...job,jobTitle:'UX Designer Intern'}, {...job,jobType:['Part-Time']}, {...job,url:'http://127.0.0.1/private'}, {...job,pubDate:'invalid'}, {...job,pubDate:new Date(now-8*86400000).toISOString()}] }, now);
   assert.equal(jobs.length,1); assert.equal(jobs[0].facts.company.value,'Acme'); assert.equal(jobs[0].sourceName,'Jobicy'); assert.equal(jobs[0].publishedAt,date);
   assert.equal(jobSnapshot({...jobs[0],id:'saved'}, now).verifiedJobId,'saved');
-  assert.throws(()=>jobSnapshot({...jobs[0],publishedAt:new Date(now-25*3600000).toISOString()},now),/24-hour/);
+  assert.equal(jobSearchEligibility({...jobs[0],publishedAt:new Date(now-48*3600000).toISOString()},now).eligible,true);
+  assert.throws(()=>jobSnapshot({...jobs[0],publishedAt:new Date(now-73*3600000).toISOString()},now),/3-day/);
 });
 
 test('targeted eligibility ages LinkedIn evidence and rejects invalid or expired timestamps', () => {
-  const saved = { id:'existing', facts:{title:{value:'UX Designer'},company:{value:'Acme'}}, extraction:'visible_linkedin_search', sourceRecency:'2 hours ago', createdAt:new Date(now-23*3600000).toISOString() };
+  const saved = { id:'existing', facts:{title:{value:'UX Designer'},company:{value:'Acme'}}, extraction:'visible_linkedin_search', sourceRecency:'2 hours ago', createdAt:new Date(now-71*3600000).toISOString() };
   assert.equal(jobSearchEligibility(saved,now).eligible,false);
-  assert.equal(jobSearchEligibility(saved,now).ageMinutes,1500);
+  assert.equal(jobSearchEligibility(saved,now).ageMinutes,4380);
   const refreshed = {...saved, observedAt:new Date(now).toISOString()};
   assert.equal(jobSearchEligibility(refreshed,now).eligible,true);
   assert.equal(jobSnapshot(refreshed,now).recency,'120 minutes ago');
-  for (const change of [{publishedAt:'invalid'}, {createdAt:'invalid'}, {publishedAt:new Date(now+60000).toISOString()}, {publishedAt:new Date(now-86400000).toISOString()}]) assert.equal(jobSearchEligibility({...saved,...change},now).eligible,false);
+  for (const change of [{publishedAt:'invalid'}, {createdAt:'invalid'}, {publishedAt:new Date(now+60000).toISOString()}, {publishedAt:new Date(now-3*86400000).toISOString()}]) assert.equal(jobSearchEligibility({...saved,...change},now).eligible,false);
   assert.match(jobSearchEligibility({...refreshed,extraction:'manual'},now).reason,/Full-time/);
 });
 

@@ -44,7 +44,7 @@ export function jobSearchEligibility(job, now = Date.now()) {
   else if (!eligibleDesignJob({ title, source: job.employmentType || '' })) reason = 'This role is not a full-time design role (internships and contracts are excluded).';
   else if (!fullTime) reason = 'Full-time status needs verification on the original listing.';
   else if (!Number.isFinite(age) || age < 0) reason = 'Posting time is unverified. Scan recent LinkedIn jobs for fresh evidence.';
-  else if (age >= 1440) reason = `Posted about ${Math.floor(age / 60)} hours ago — outside your 24-hour outreach window. Scan recent LinkedIn jobs for newer roles.`;
+  else if (age >= 4320) reason = `Posted about ${Math.floor(age / 60)} hours ago — outside your 3-day outreach window. Scan recent LinkedIn jobs for newer roles.`;
   return { eligible: !reason, reason, ageMinutes: Number.isFinite(age) && age >= 0 ? age : null };
 }
 export function jobSnapshot(job, now = Date.now()) {

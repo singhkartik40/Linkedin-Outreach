@@ -26,6 +26,7 @@ const assert = require('node:assert/strict');
     });
     await page.reload();
     await page.getByRole('button', { name: /Job research 1/ }).click();
+    await page.getByLabel('Posted', {exact:true}).selectOption('unknown');
     await page.getByRole('button', { name: /Unreviewed job post/ }).waitFor();
     assert.equal(await page.getByRole('button', {name:'Find 4 people for this job',exact:true}).isEnabled(), false, 'unverified jobs cannot start a contact scan');
     await page.getByRole('button', { name: /Unreviewed job post/ }).click();
