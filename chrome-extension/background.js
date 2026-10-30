@@ -165,10 +165,12 @@ async function sendProgress(payload) {
   const tabs = await chrome.tabs.query({ url: [`${LOCAL_ORIGIN}/*`] });
   for (const tab of tabs) if (tab.id) chrome.tabs.sendMessage(tab.id, { type: 'people-scan-progress', payload }).catch(() => {});
 }
+async function closeScanTab(scan) { if (Number.isInteger(scan.tabId) && chrome.tabs.remove) await chrome.tabs.remove(scan.tabId).catch(() => {}); }
 async function finishScan(scan) {
   await chrome.storage.local.set({ lastScanDiagnostics: { ...scan, completedAt: Date.now() } });
   await chrome.storage.local.remove('peopleScan');
   await sendScanResults({ scanId: scan.scanId, mode: scan.mode, cities: scan.cities, warnings: scan.warnings || [], replace: scan.replace, jobs: resultJobs(scan, scan.results), people: scan.results.filter(person => !person.independentFounder), founders: scan.results.filter(person => person.independentFounder), targeted: !!scan.targeted });
+  await closeScanTab(scan);
 }
 async function navigate(scan, url, detail) {
   scan.stageStartedAt = Date.now();
@@ -216,10 +218,11 @@ async function advanceJobsScan(tabId, scan) {
   scan.companies = [...new Set(scan.jobs.map(job => clean(job.company)).filter(Boolean))].slice(0, 20);
   if (!scan.companies.length) {
     await chrome.storage.local.set({ lastScanDiagnostics: { ...scan, completedAt: Date.now() } });
-    if (!scan.targeted) { scan.warnings = [...(scan.warnings || []), 'No recent LinkedIn jobs passed the checks; founder discovery continued on Google.']; return startFounders(scan); }
+    if (scan.mode === 'all') { scan.warnings = [...(scan.warnings || []), 'No recent LinkedIn jobs passed the checks; founder discovery continued on Google.']; return startFounders(scan); }
     await chrome.storage.local.remove('peopleScan');
     const cardsSeen = (scan.jobDiagnostics || []).reduce((total, page) => total + (page.cardsSeen || 0), 0);
     await sendScanResults({ error: cardsSeen ? `LinkedIn showed ${cardsSeen} job cards across ${searches.length} searches, but none passed the recent full-time design checks.${scan.warnings?.length ? ` Latest issue: ${scan.warnings.at(-1)}` : ''}` : `LinkedIn job cards could not be read across ${searches.length} searches.${scan.warnings?.length ? ` Latest issue: ${scan.warnings.at(-1)}` : ' The results page may still be loading.'}`, jobs: scan.jobs, people: [], diagnostics: scan.jobDiagnostics || [] });
+    await closeScanTab(scan);
     return;
   }
   scan.phase = 'people'; scan.companyIndex = 0; scan.role = scan.mode === 'founders' ? 'founder' : 'designer'; scan.stageStartedAt = Date.now();
@@ -349,6 +352,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
         await chrome.storage.local.remove('peopleScan');
         await sendProgress({ phase: 'complete', percent: 100, detail: `Checked ${peopleScan.jobs.length} jobs and found ${payload.people.length} new people`, jobsFound: peopleScan.jobs.length, peopleFound: payload.people.length });
         await sendScanResults(payload);
+        await closeScanTab(peopleScan);
         sendResponse({ ok: true, complete: true });
       } else {
         peopleScan.stageStartedAt = Date.now();
@@ -385,7 +389,7 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     chrome.tabs.create({ url: 'about:blank', active: true }).then(async tab => {
       if (!tab?.id) throw new Error('Could not open LinkedIn people search.');
       const startedAt = Date.now();
-      const scan = { scanId: `${startedAt}-${Math.random().toString(36).slice(2)}`, tabId: tab.id, phase: 'jobs', mode: targetJob ? 'team' : request.payload?.mode === 'founders' ? 'founders' : 'all', targeted: !!targetJob, jobIndex: 0, cities, searches, jobs: targetJob ? [targetJob] : [], companies: [], companyIndex: 0, results: [], excludedProfiles: (request.payload?.excludedProfiles || []).map(profileKey).filter(Boolean), limit, replace: targetJob ? false : !!request.payload?.replace, startedAt, stageStartedAt: startedAt };
+      const scan = { scanId: `${startedAt}-${Math.random().toString(36).slice(2)}`, tabId: tab.id, phase: 'jobs', mode: targetJob ? 'team' : ['team','founders'].includes(request.payload?.mode) ? request.payload.mode : 'all', targeted: !!targetJob, jobIndex: 0, cities, searches, jobs: targetJob ? [targetJob] : [], companies: [], companyIndex: 0, results: [], excludedProfiles: (request.payload?.excludedProfiles || []).map(profileKey).filter(Boolean), limit, replace: targetJob ? false : !!request.payload?.replace, startedAt, stageStartedAt: startedAt };
       if (scan.mode === 'founders') { await startFounders(scan); return; }
       if (targetJob) { scan.phase = 'people'; scan.companies = [clean(targetJob.company)]; scan.role = 'designer'; await chrome.storage.local.set({ peopleScan: scan }); await chrome.tabs.update(tab.id, { url: searchUrl(targetJob.company, 'designer') }); return; }
       await chrome.storage.local.set({ peopleScan: scan });

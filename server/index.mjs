@@ -48,6 +48,8 @@ async function body(req) {
   try { return JSON.parse(raw || '{}'); } catch { throw new Error('Invalid JSON request.'); }
 }
 if (!store.get('discoverySchedule')) store.set('discoverySchedule', initialSchedule());
+const existingSchedule = store.get('discoverySchedule');
+if (existingSchedule?.nextRunAt > Date.now() + INTERVAL) store.set('discoverySchedule', { ...existingSchedule, nextRunAt: Date.now() + INTERVAL });
 function publicState() {
   const provider = store.get('provider');
   const tracker = store.get('tracker');
@@ -391,7 +393,7 @@ if (port === 4318) {
   void ensureFreshTracker().catch(() => {});
   const trackerTimer = setInterval(() => { void ensureFreshTracker().catch(() => {}); }, 5 * 60000);
   trackerTimer.unref();
-  const boardTimer = setInterval(() => { void jobBoard.sync().catch(() => {}); }, 6 * 3600000);
+  const boardTimer = setInterval(() => { void jobBoard.sync().catch(() => {}); }, 3600000);
   boardTimer.unref();
   void jobBoard.sync().catch(() => {});
 }

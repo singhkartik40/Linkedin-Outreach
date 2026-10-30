@@ -4,8 +4,8 @@ import { recentJobMinutes } from './recent-jobs.mjs';
 import { isIndianLocation } from './locations.mjs';
 
 export const boardSources = [
-  { name: 'Jobicy', url: 'https://jobicy.com/api/jobs?count=200&tag=design', delay: 'Listings delayed by 3 hours' },
-  { name: 'Remotive', url: 'https://remotive.com/api/remote-jobs?category=design', delay: 'Listings delayed by 24 hours' },
+  { name: 'Jobicy', url: 'https://jobicy.com/api/jobs?count=200&tag=design&geo=india', pollMs: 3600000, delay: 'Listings delayed by 3 hours' },
+  { name: 'Remotive', url: 'https://remotive.com/api/remote-jobs?category=design', pollMs: 6 * 3600000, delay: 'Listings delayed by 24 hours' },
 ];
 const clean = value => {
   let text = '', insideTag = false;
@@ -61,7 +61,7 @@ export function createJobBoard(store, fetcher = fetch) {
       let added = 0;
       const results = await Promise.allSettled(boardSources.map(async source => {
         const previous = sources[source.name];
-        if (previous?.attemptAt && Date.now() - Date.parse(previous.attemptAt) < 6 * 3600000) return;
+        if (previous?.attemptAt && Date.now() - Date.parse(previous.attemptAt) < source.pollMs) return;
         const attemptAt = new Date().toISOString();
         try {
           const response = await fetcher(source.url, { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15000), redirect: 'error' });

@@ -101,3 +101,9 @@ Send detection now requires the user's final Send click and a new LinkedIn succe
 Writer settings saved through Tracker persist in the private local SQLite database. They are not encrypted at rest, never returned in public state or event logs, and `.data` is excluded from Git. Localhost Host/Origin guards remain enforced. Script download serves a fixed, secret-free source file. Saving settings validates their format; it does not prove deployment permissions or live Sheet access. The user's Google authorization and Apps Script deployment are still required.
 
 Validation: 73 unit/API tests passed, including writer settings surviving a service restart without leaking tokens. Production build and Chrome desktop/mobile UI smoke passed. The unpacked Chrome extension test confirmed an edited invitation using a reused success toast and recovered after a lost API response, with the queue cleared only after acknowledgement. These used isolated fixtures; no real invitation or Sheet write was sent. The live service is healthy, but the live writer remains unconfigured.
+
+## v0.6.4 search separation and hourly refresh
+
+Manual team and founder scans now use explicit independent audiences; UI tabs remain available and the other search can be queued. Scan concurrency remains serialized through the existing server lease and extension state. Helper-created research tabs close on completion. India-only feed filtering remains enforced; direct LinkedIn job refresh searches India. Jobicy refreshes hourly; Remotive retains six-hour caching per its documented recommendation. Scheduled Chrome discovery runs hourly while the dashboard is open.
+
+73 unit/API tests and production build passed. An isolated Chrome extension run found 20 team contacts, then 10 startup founders in a separate run, and verified automatic completion after an edited note and a simulated lost response. No real invitations were sent during these checks.

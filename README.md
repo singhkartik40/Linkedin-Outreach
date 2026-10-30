@@ -69,7 +69,7 @@ The helper lets the app open LinkedIn, find people, and fill in a message.
 2. Turn on **Developer mode**.
 3. Click **Load unpacked**.
 4. Select the project's **chrome-extension** folder.
-5. Check that **Outreach Desk LinkedIn Helper v0.6.3** is enabled.
+5. Check that **Outreach Desk LinkedIn Helper v0.6.4** is enabled.
 6. Refresh the Outreach Desk page.
 
 **Already installed?** Click the helper's **Reload** button, then refresh Outreach Desk. You do not need to remove and install it again.
@@ -92,7 +92,7 @@ In **Job research**, each row has **Open on LinkedIn** to open the original job 
 
 **Refresh people** replaces unfinished drafts with a fresh search across both groups. Completed, skipped and deleted records are kept. Deleted contacts can be restored. You can also search the table, filter by company, copy details, and download a CSV file.
 
-## Let it search every two hours
+## Let it search every hour
 
 Automatic scans look for designers, HR/recruiters, and founders. Use **Pause auto-scan** or **Enable auto-scan** to control them.
 
@@ -155,7 +155,7 @@ The writer updates the matching contact's status/date, or adds a new row if need
 
 </details>
 
-Tracker refreshes can run every five hours if enabled under **Automation**. This is separate from the two-hour people search.
+Tracker refreshes can run every five hours if enabled under **Automation**. This is separate from the hourly people search.
 
 ## Update the app
 
@@ -234,7 +234,7 @@ Click **Find 4 people for this job** to search only that company: up to **2 desi
 3. The helper opens each profile and checks the visible name, current founder role, company and Indian location.
 4. Verified contacts appear in **Founders & co-founders** with a design pitch, portfolio and résumé links. No job or funding claim is invented.
 
-Reload helper **v0.6.3** in Chrome and allow its access to **Google Search** as well as LinkedIn. If Google asks for verification or LinkedIn asks you to sign in, complete that yourself and retry. Empty or blocked results are reported; the app cannot guarantee 20 matches.
+Reload helper **v0.6.4** in Chrome and allow its access to **Google Search** as well as LinkedIn. If Google asks for verification or LinkedIn asks you to sign in, complete that yourself and retry. Empty or blocked results are reported; the app cannot guarantee 20 matches.
 
 
 ### What changed in v0.6.1
@@ -244,7 +244,7 @@ Reload helper **v0.6.3** in Chrome and allow its access to **Google Search** as 
 - A person must have an explicit current role at the hiring company. A past-company mention or search keyword alone does not qualify. Older drafts without current-company evidence show a warning and cannot be sent; a new scan can recheck them.
 - Draft messages use varied, polite wording for designers, recruiters and founders. Both links remain intact within 290 characters. Existing unsent drafts are updated once, with their previous wording kept in message history. Completed and skipped contacts stay unchanged.
 
-Use the current helper **v0.6.3**, then refresh the dashboard.
+Use the current helper **v0.6.4**, then refresh the dashboard.
 
 
 ### India jobs and company outreach limits (v0.6.2)
@@ -255,10 +255,16 @@ The tracker is refreshed on startup, before scans and outreach preparation when 
 
 Five distinct people marked Sent, Invitation pending or otherwise confirmed reached for a company and posting is the limit. Confirmed local sends count too, including Sheet writes still pending. Extra drafts move out of Active into **Company limit**; they are not deleted. Separate known job links are separate postings. Historical rows without a job link count conservatively against the company. An explicit repost with a timestamp newer than the old sends allows a new round; refreshing the page alone never resets the count. Historical sends without dates remain counted. The same individual is still protected from duplicate outreach across postings.
 
-The v0.6.2 changes did not require a helper update. For the current release, use helper v0.6.3 and refresh the dashboard.
+The v0.6.2 changes did not require a helper update. For the current release, use helper v0.6.4 and refresh the dashboard.
 
-## Automatic completion — helper v0.6.3
+## Automatic completion — helper v0.6.4
 
 Click **Send outreach**, review the prepared invitation in LinkedIn, and click LinkedIn's final **Send** button. When LinkedIn confirms success, the person moves to **Completed** automatically and the app tries to update the Sheet. Opening or cancelling the invitation does not mark it sent. Edited notes and **Send without a note** are supported when a success signal is visible.
 
 Keep the dashboard open during sending. The helper retries delivery of the confirmation after temporary dashboard/API failures, within the 15-minute outreach session. If no confirmation is visible, verify the invitation yourself before using **Mark done**. To enable the updated tracking, reload the helper at `chrome://extensions` and refresh Outreach Desk.
+
+## Separate searches (v0.6.4)
+
+Designers & HR searches check recent full-time design jobs, then up to two designers and two HR contacts per company. Founder searches use Google startup discovery and LinkedIn profile checks independently. Both audience tabs stay available during a scan. You can queue the other audience search; it runs after the current search finishes. Temporary helper scan tabs close when complete.
+
+India-only Jobicy feeds refresh hourly; Remotive stays on a six-hour cache in line with its recommended maximum four daily requests. Automatic combined LinkedIn/team/founder scans run hourly while the dashboard is open in signed-in Chrome. This does not import every LinkedIn listing: there is no configured LinkedIn jobs API, and coverage depends on visible search results and source availability. Jobicy/Remotive retain their source publication delays.

@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { initialSchedule, claimSchedule, finishSchedule, INTERVAL } from '../server/discovery-schedule.mjs';
-test('automatic discovery is due every two hours and cannot overlap', () => {
+test('automatic discovery is due every hour and cannot overlap', () => {
  const initial = initialSchedule(1000);
  assert.equal(claimSchedule(initial, true, 1001), null);
  const run = claimSchedule(initial, true, 1000 + INTERVAL);

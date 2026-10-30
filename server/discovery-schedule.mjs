@@ -1,5 +1,5 @@
 import { randomUUID } from 'node:crypto';
-export const INTERVAL = 2 * 60 * 60 * 1000;
+export const INTERVAL = 60 * 60 * 1000;
 const LEASE = 15 * 60 * 1000;
 export function initialSchedule(now = Date.now()) { return { enabled: true, nextRunAt: now + INTERVAL, lastRunAt: null, lastFinishedAt: null, lastStatus: 'Not run yet', lastAdded: 0, runId: null, leaseUntil: 0 }; }
 export function claimSchedule(schedule, automatic, now = Date.now()) {

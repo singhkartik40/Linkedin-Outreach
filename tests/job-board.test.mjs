@@ -35,6 +35,8 @@ test('board coalesces concurrent requests, deduplicates jobs, caches each feed a
   const [first,second]=await Promise.all([board.sync(),board.sync()]);
   assert.equal(first.added,1); assert.equal(second.added,1); assert.equal(calls,2); assert.match(first.sources.Remotive.status,/Unavailable/);
   await board.sync(); assert.equal(calls,2); assert.equal(jobs.length,1);
+  for (const source of Object.values(values.jobBoardSources)) source.attemptAt = new Date(Date.now()-3600001).toISOString();
+  await board.sync(); assert.equal(calls,3, 'Jobicy refreshes hourly; Remotive retains its six-hour source limit');
 });
 test('Google-discovered founders need current profile evidence but no job or funding, with pitch and links', () => {
   const person={name:'Asha Rao',company:'Acme',headline:'Co-founder at Acme',location:'Indore, India',profileUrl:'https://www.linkedin.com/in/asha-example/',startupSourceUrl:'https://www.linkedin.com/company/acme/',googleUrl:'https://www.google.com/search?q=Acme+founder',evidence:'Co-founder at Acme'};

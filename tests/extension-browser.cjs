@@ -65,7 +65,7 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
     await page.getByRole('button', { name: 'Delhi', exact: true }).click();
     await page.getByRole('button', { name: 'Mumbai', exact: true }).click();
     await page.getByRole('button', { name: 'Find 20 new people' }).click();
-    try { await page.getByRole('status').filter({ hasText: 'added 30 new people' }).waitFor({ timeout: 180000 }); }
+    try { await page.getByRole('status').filter({ hasText: 'added 20 new people' }).waitFor({ timeout: 180000 }); }
     catch (error) {
       console.error('Dashboard:', (await page.locator('body').innerText()).slice(0, 1200));
       console.error('Tabs:', context.pages().map(tab => tab.url()));
@@ -74,6 +74,9 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
       if (linkedIn) console.error('People DOM:', await linkedIn.evaluate(() => ({ cards: document.querySelectorAll('a[componentkey^="auto-component-"][href*="/in/"]').length, first: document.querySelector('a[componentkey^="auto-component-"][href*="/in/"]')?.innerText, body: document.body.innerText.slice(0, 300) })));
       throw error;
     }
+    await page.getByRole('button', {name:'Founders & co-founders',exact:true}).click();
+    await page.getByRole('button', {name:'Find startup founders',exact:true}).click();
+    await page.getByRole('status').filter({hasText:'added 10 new people'}).waitFor({timeout:180000});
     const state = await (await page.request.get('http://127.0.0.1:14320/api/state')).json();
     assert.equal(state.contacts.length, 30);
     assert.equal(state.contacts.filter(person => person.contactRole === 'founder').length, 10);

@@ -10,7 +10,7 @@ export type Contact = { companyLimit?: { blocked: boolean; count: number; reason
 type State = { jobBoardSources?: Record<string, { status: string; syncedAt?: string; count?: number; delay: string }>; discoverySchedule?: { enabled: boolean; nextRunAt: number; lastRunAt: number | null; lastStatus: string; lastAdded: number; leaseUntil: number }; provider: null | { provider: string; model: string; baseUrl: string; hasKey: boolean }; google: { connected: boolean; configured: boolean; readOnly: boolean; writeConfigured: boolean }; spreadsheetId: string; tracker: null | { title: string; rowCount: number; syncedAt: string; tabs: string[]; headers: string[]; missingTabs: string[]; missingHeaders: string[]; schemaValid: boolean }; jobs: Job[]; contacts: Contact[]; events: { id: string; kind: string; message: string; created_at: string }[]; sending: { available: boolean; reason: string }; automation: { autoSync: boolean; desiredSending: string } };
 type Page = 'Overview' | 'Outreach' | 'Job research' | 'Tracker' | 'Automation' | 'Settings';
 const providerNames: Record<string, string> = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', nvidia: 'NVIDIA NIM', chutes: 'Chutes AI', compatible: 'OpenAI-compatible' };
-const helperVersion = '0.6.3';
+const helperVersion = '0.6.4';
 const labels: Record<string, string> = { title: 'Job title', company: 'Company', location: 'Location', postedAt: 'Exact posted time', experienceMin: 'Minimum experience (years)', experienceFlexible: 'Experience is flexible', salaryLpa: 'Minimum salary (₹ LPA)', saturdayWork: 'Saturday work', roleCategory: 'Role category', applicationOpen: 'Applications open' };
 async function api(path: string, data?: unknown) {
   const response = await fetch(`/api${path}`, data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -41,6 +41,8 @@ function App() {
   const [jobSource, setJobSource] = useState('All sources'), [jobLocation, setJobLocation] = useState(''), [jobAge, setJobAge] = useState('all');
   const [filter, setFilter] = useState('All jobs'), [search, setSearch] = useState('');
   const [discoveryMode, setDiscoveryMode] = useState<'team' | 'founders'>('team');
+  const [runningAudience, setRunningAudience] = useState('');
+  const [queuedAudience, setQueuedAudience] = useState<'team' | 'founders' | null>(null);
   const isFounder = (contact: Contact) => contact.contactRole === 'founder' || /\b(?:co[ -]?)?founder\b/i.test(contact.headline);
   const [handoff, setHandoff] = useState<Contact | null>(null);
   const outreachReceipts = useRef<Map<string, string>>(new Map());
@@ -50,6 +52,8 @@ function App() {
   function changeCities(value: string[]) { setCities(value); try { localStorage.setItem('outreach-cities', JSON.stringify(value)); } catch {} }
   const discoveryRunId = useRef<string | null>(null), autoRetryAfter = useRef(0);
   const [peopleScanning, setPeopleScanning] = useState(false), scanTimer = useRef<number | null>(null), scanActive = useRef(false);
+  useEffect(() => { if (!peopleScanning && queuedAudience) { const mode = queuedAudience; setQueuedAudience(null); void scanPeople(false, false, undefined, false, mode); } }, [peopleScanning, queuedAudience]);
+  function findAudience(replace = false) { if (peopleScanning) { setQueuedAudience(discoveryMode); return; } void scanPeople(replace); }
   const [scanProgress, setScanProgress] = useState<{ percent: number; detail: string; jobsFound: number; peopleFound: number } | null>(null);
   const scanImports = useRef<Promise<void>>(Promise.resolve()), scanAdded = useRef(0), scanReplaced = useRef(false), scanImportError = useRef('');
   const scanFounderAdded = useRef(0), scanWarnings = useRef<Set<string>>(new Set());
@@ -141,7 +145,7 @@ function App() {
   const activeContacts = state?.contacts.filter(contact => !contact.companyLimit?.blocked && !contact.deletedAt && !['Send confirmed', 'Sent', 'Skipped'].includes(contact.status)) || [];
   const completedContacts = state?.contacts.filter(contact => !contact.companyLimit?.blocked && !contact.deletedAt && ['Send confirmed', 'Sent'].includes(contact.status)) || [];
   const go = (value: Page) => { setPage(value); setSelectedId(null); setSelectedContactId(null); setNotice(null); };
-  async function refreshBoard() { await run('board', async () => { const result = await api('/job-board/sync', {}); const failed = Object.values(result.sources || {}).filter((source: any) => source.status !== 'Connected'); setNotice({ text: `Job board refreshed: ${result.added} new roles.${failed.length ? ` ${failed.length} feed(s) unavailable; see source status below.` : ' Already checked feeds use the six-hour cache.'}`, error: failed.length > 0 }); }); }
+  async function refreshBoard() { await run('board', async () => { const result = await api('/job-board/sync', {}); const failed = Object.values(result.sources || {}).filter((source: any) => source.status !== 'Connected'); setNotice({ text: `Job board refreshed: ${result.added} new roles.${failed.length ? ` ${failed.length} feed(s) unavailable; see source status below.` : ' Feeds keep their hourly or six-hour source cache.'}`, error: failed.length > 0 }); }); }
   useEffect(() => { if (page === 'Job research') void refreshBoard(); }, [page]);
   async function prepareOutreach(contact: Contact) {
     if (contact.outreachBlocked) { setNotice({ text: contact.sheetStatus === 'Tracker not connected' ? 'Refresh the public tracker before outreach.' : 'This person already appears in the tracker.', error: true }); return; }
@@ -186,7 +190,7 @@ function App() {
     } catch (error) { setNotice({ text: (error as Error).message, error: true }); }
     finally { setBusy(''); }
   }
-  async function scanPeople(replace: boolean, automatic = false, target?: Job, freshJobs = false) {
+  async function scanPeople(replace: boolean, automatic = false, target?: Job, freshJobs = false, audience?: 'team' | 'founders') {
     if (!state || scanActive.current || peopleScanning) return;
     function requestHelper(type: string, payload: unknown) {
       const requestId = crypto.randomUUID();
@@ -201,7 +205,7 @@ function App() {
       window.postMessage({ source: 'outreach-desk', type, requestId, payload }, window.location.origin);
       return response;
     }
-    setPeopleScanning(true); setScanProgress({ percent: 2, detail: 'Checking Chrome helper', jobsFound: 0, peopleFound: 0 }); setNotice(null);
+    setRunningAudience(automatic ? 'all' : freshJobs || target ? 'team' : audience || discoveryMode); setPeopleScanning(true); setScanProgress({ percent: 2, detail: 'Checking Chrome helper', jobsFound: 0, peopleFound: 0 }); setNotice(null);
     const ping = await requestHelper('ping-helper', {});
     if (!ping.ok || ping.version !== helperVersion) { if (automatic) autoRetryAfter.current = Date.now() + 60000; await finishDiscovery('Helper needs reloading'); await refresh(); setPeopleScanning(false); setScanProgress(null); setNotice({ text: 'The Chrome helper needs to be reloaded. Open chrome://extensions, reload Outreach Desk LinkedIn Helper, then refresh this page.', error: true }); return; }
     let claim;
@@ -214,8 +218,8 @@ function App() {
     if (target) { try { targetJob = (await api(`/jobs/${target.id}/people-search`, {})).job; } catch (error) { await finishDiscovery((error as Error).message); setPeopleScanning(false); setScanProgress(null); setNotice({ text: (error as Error).message, error: true }); return; } }
     scanActive.current = true; setScanProgress({ percent: 3, detail: 'Opening recent LinkedIn jobs', jobsFound: 0, peopleFound: 0 });
     const metroCities = ['Bengaluru', 'Mumbai', 'Delhi', 'Hyderabad', 'Pune', 'Chennai', 'Kolkata', 'Gurugram', 'Noida'];
-    const scanCities = cities.includes('India') ? ['India', ...metroCities] : cities;
-    const result = await requestHelper('scan-people', { limit: target ? 4 : 20, job: targetJob, mode: target ? 'team' : discoveryMode === 'founders' && !automatic && !freshJobs ? 'founders' : 'all', cities: scanCities, replace, excludedProfiles: state.contacts.filter(contact => contact.employmentVerified !== false || contact.status !== 'Draft ready' || contact.deletedAt).map(contact => contact.profileUrl) });
+    const scanCities = freshJobs ? ['India'] : cities.includes('India') ? ['India', ...metroCities] : cities;
+    const result = await requestHelper('scan-people', { limit: target ? 4 : 20, job: targetJob, mode: automatic ? 'all' : target || freshJobs ? 'team' : audience || discoveryMode, cities: scanCities, replace, excludedProfiles: state.contacts.filter(contact => contact.employmentVerified !== false || contact.status !== 'Draft ready' || contact.deletedAt).map(contact => contact.profileUrl) });
     if (!result.ok) { await finishDiscovery(result.error || 'Could not start scan'); await refresh(); scanActive.current = false; setPeopleScanning(false); setScanProgress(null); setNotice({ text: result.error || 'Chrome helper could not start the people scan.', error: true }); return; }
     if (target || freshJobs) { setPage('Outreach'); setDiscoveryMode('team'); }
     armScanTimeout();
@@ -231,7 +235,7 @@ function App() {
       <div className="workspace"><span className="avatar">KS</span><div>Kartik’s workspace<small>Personal · Local</small></div><span className="workspace-dot"/></div>
       
       <nav aria-label="Main navigation">{(['Overview', 'Outreach', 'Job research', 'Tracker', 'Automation', 'Settings'] as Page[]).map(item => <button key={item} className={page === item ? 'nav-item active' : 'nav-item'} onClick={() => go(item)} aria-current={page === item ? 'page' : undefined}><Icon name={item}/>{item}{item === 'Outreach' && !!state?.contacts.length && <span className="nav-count">{state.contacts.length}</span>}{item === 'Job research' && !!state?.jobs.length && <span className="nav-count">{state.jobs.length}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><span className="local-dot"/> Running on your computer<p>Private workspace</p><span className="version">LOCAL BUILD · v0.6.3</span></div>
+      <div className="sidebar-bottom"><span className="local-dot"/> Running on your computer<p>Private workspace</p><span className="version">LOCAL BUILD · v0.6.4</span></div>
     </aside>
     <div className="main-shell"><header className="topbar"><span>Workspace <span className="slash">/</span> <strong>{page}</strong></span><div><span className="timezone">India · IST</span><span className="mini-avatar">KS</span></div></header>
     <main>
@@ -246,15 +250,15 @@ function App() {
 
       </>}
       {page === 'Outreach' && <>
-        <PageHeading eyebrow="OUTREACH QUEUE" title="Outreach" description="Find designers and HR from recent jobs, plus startup founders discovered through Google and checked on LinkedIn." action={<div className="heading-actions"><Badge tone="blue">{activeContacts.filter(contact => isFounder(contact) === (discoveryMode === 'founders')).length} drafts ready</Badge><button className="button primary" disabled={peopleScanning} onClick={() => scanPeople(false)}><Icon name="plus" size={16}/>{peopleScanning ? 'Scanning LinkedIn…' : (discoveryMode === 'founders' ? 'Find startup founders' : 'Find 20 new people')}</button><button className="button secondary" disabled={peopleScanning} onClick={() => scanPeople(true)}>Refresh people</button><button className="button secondary" disabled={!!busy} onClick={() => run('sync', async () => { await api('/tracker/sync', {}); }, 'Tracker refreshed. Completed contacts were checked against your Sheet updates.')}>Refresh tracker</button></div>}/>
-        {peopleScanning && scanProgress && <section className="scan-progress" role="status" aria-live="polite"><div><strong>{scanProgress.detail}</strong><span>{scanProgress.percent}%</span></div><progress max="100" value={scanProgress.percent}/><small>{scanProgress.jobsFound} job cards checked · {scanProgress.peopleFound} candidates found · target 20 designers/HR plus up to 20 founders</small></section>}
+        <PageHeading eyebrow="OUTREACH QUEUE" title="Outreach" description="Find designers and HR from recent jobs, plus startup founders discovered through Google and checked on LinkedIn." action={<div className="heading-actions"><Badge tone="blue">{activeContacts.filter(contact => isFounder(contact) === (discoveryMode === 'founders')).length} drafts ready</Badge><button className="button primary" disabled={peopleScanning && (runningAudience === discoveryMode || runningAudience === 'all' || queuedAudience === discoveryMode)} onClick={() => findAudience()}><Icon name="plus" size={16}/>{peopleScanning ? (queuedAudience === discoveryMode ? 'Search queued' : runningAudience === discoveryMode || runningAudience === 'all' ? 'Scanning LinkedIn…' : 'Queue this search') : (discoveryMode === 'founders' ? 'Find startup founders' : 'Find 20 new people')}</button><button className="button secondary" disabled={peopleScanning} onClick={() => findAudience(true)}>Refresh people</button><button className="button secondary" disabled={!!busy} onClick={() => run('sync', async () => { await api('/tracker/sync', {}); }, 'Tracker refreshed. Completed contacts were checked against your Sheet updates.')}>Refresh tracker</button></div>}/>
+        {peopleScanning && scanProgress && <section className="scan-progress" role="status" aria-live="polite"><div><strong>{scanProgress.detail}</strong><span>{scanProgress.percent}%</span></div><progress max="100" value={scanProgress.percent}/><small>{scanProgress.jobsFound} job cards checked · {scanProgress.peopleFound} candidates found · {runningAudience === 'founders' ? 'target up to 20 founders' : runningAudience === 'team' ? 'target up to 20 designers/HR' : 'target up to 20 designers/HR plus 20 founders'}</small></section>}
         <section className="discovery-console" aria-label="Discovery schedule">
-          <div><h2>{state.discoverySchedule?.enabled ? 'Auto-scan every 2 hours' : 'Discovery is paused.'}</h2><small>Runs while this dashboard is open in Chrome.</small></div>
+          <div><h2>{state.discoverySchedule?.enabled ? 'Auto-scan every hour' : 'Discovery is paused.'}</h2><small>Runs while this dashboard is open in Chrome.</small></div>
           <dl><div><dt>Next scan</dt><dd>{state.discoverySchedule?.enabled ? new Date(state.discoverySchedule.nextRunAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : 'Paused'}</dd></div><div><dt>Last result</dt><dd>{state.discoverySchedule?.lastStatus || 'Not run yet'}</dd></div><div><dt>New people last run</dt><dd>{state.discoverySchedule?.lastAdded || 0}</dd></div></dl>
           <button className="button secondary" disabled={!!busy} onClick={() => run('schedule', async () => { await api('/discovery-schedule', {enabled: !state.discoverySchedule?.enabled}); })}>{state.discoverySchedule?.enabled ? 'Pause auto-scan' : 'Enable auto-scan'}</button>
         </section>
         <section className="founder-discovery" aria-label="Discovery audience">
-          <div className="city-options"><button type="button" disabled={peopleScanning} aria-pressed={discoveryMode === 'team'} onClick={() => setDiscoveryMode('team')}>Designers & HR</button><button type="button" disabled={peopleScanning} aria-pressed={discoveryMode === 'founders'} onClick={() => setDiscoveryMode('founders')}>Founders & co-founders</button></div>
+          <div className="city-options"><button type="button" aria-pressed={discoveryMode === 'team'} onClick={() => setDiscoveryMode('team')}>Designers & HR</button><button type="button" aria-pressed={discoveryMode === 'founders'} onClick={() => setDiscoveryMode('founders')}>Founders & co-founders</button></div>
           
           <p>{discoveryMode === 'founders' ? 'Google → startups → LinkedIn founders. Current roles checked; no job opening required.' : '2 designers + 2 HR contacts per company. Founder discovery runs separately on Google.'}</p>
         </section>
@@ -262,11 +266,11 @@ function App() {
         <OutreachBoard key={discoveryMode} contacts={state.contacts.filter(contact => isFounder(contact) === (discoveryMode === 'founders'))} jobs={state.jobs} initialId={selectedContactId} send={prepareOutreach} done={markDone} retry={retrySheet} save={async (contact, input) => { await api(`/contacts/${contact.id}`, input); await refresh(); }} action={async (contact, input) => { await api(`/contacts/${contact.id}/actions`, input); await refresh(); }}/>
       </>}
       {page === 'Job research' && <>
-        <PageHeading eyebrow="JOB BOARD" title={selected ? 'Look beyond the listing.' : 'Your next role. One workspace.'} description="India-only jobs from LinkedIn, Jobicy and Remotive. Find a role, then reach the people behind it." action={<div className="heading-actions"><button className="button primary" disabled={!!busy} onClick={refreshBoard}>{busy === 'board' ? 'Refreshing…' : 'Refresh job feeds'}</button><button className="button secondary" disabled={peopleScanning} onClick={() => scanPeople(false, false, undefined, true)}>Scan recent LinkedIn jobs</button><a className="button secondary" href="https://www.linkedin.com/jobs/search/?keywords=UX%20Designer&location=India&f_TPR=r86400&f_JT=F" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>}/>
+        <PageHeading eyebrow="JOB BOARD" title={selected ? 'Look beyond the listing.' : 'Your next role. One workspace.'} description="India only. Jobicy refreshes hourly; Remotive every 6 hours while the service runs. LinkedIn scans run hourly with this dashboard open in signed-in Chrome; coverage is limited to visible search results, not every LinkedIn job." action={<div className="heading-actions"><button className="button primary" disabled={!!busy} onClick={refreshBoard}>{busy === 'board' ? 'Refreshing…' : 'Refresh job feeds'}</button><button className="button secondary" disabled={peopleScanning} onClick={() => scanPeople(false, false, undefined, true)}>Scan recent LinkedIn jobs</button><a className="button secondary" href="https://www.linkedin.com/jobs/search/?keywords=UX%20Designer&location=India&f_TPR=r86400&f_JT=F" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>}/>
         <div className="board-sources"><span>LinkedIn · via Chrome scan</span>{Object.entries(state.jobBoardSources || {}).map(([name, source]) => <span key={name} title={source.delay}><strong>{name}</strong> · {source.status} · {source.syncedAt ? new Date(source.syncedAt).toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'}) : 'Not checked'}<small>{source.delay}</small></span>)}</div>
         {selected ? <><JobPeopleAction job={selected} scanning={peopleScanning} find={job => scanPeople(false, false, job)}/><JobDetail key={selected.id} job={selected} busy={!!busy} back={() => setSelectedId(null)} save={facts => run('facts', async () => { await api(`/jobs/${selected.id}/facts`, { facts }); }, 'Facts saved. Values without an exact source quote remain unresolved.')}/></> : <>
           <div className="board-filters"><label>Search roles or companies<input aria-label="Search jobs" placeholder="Product designer, company…" value={search} onChange={e => setSearch(e.target.value)}/></label><label>Source<select value={jobSource} onChange={e => setJobSource(e.target.value)}>{['All sources','LinkedIn','Jobicy','Remotive'].map(name => <option key={name}>{name}</option>)}</select></label><label>Location<input placeholder="India, Bengaluru, Mumbai…" value={jobLocation} onChange={e => setJobLocation(e.target.value)}/></label><label>Posted<select value={jobAge} onChange={e => setJobAge(e.target.value)}><option value="all">All saved jobs</option><option value="24">Past 24 hours</option><option value="168">Past 7 days</option></select></label></div>
-          <div className="list-toolbar"><div className="tabs" aria-label="Job status filter">{['All jobs','Ready for outreach','Eligible','To verify','Excluded'].map(item => <button className={filter === item ? 'selected' : ''} key={item} onClick={() => setFilter(item)}>{item}</button>)}</div><small>{jobs.length} roles · automatic feed refresh every 6 hours</small></div>
+          <div className="list-toolbar"><div className="tabs" aria-label="Job status filter">{['All jobs','Ready for outreach','Eligible','To verify','Excluded'].map(item => <button className={filter === item ? 'selected' : ''} key={item} onClick={() => setFilter(item)}>{item}</button>)}</div><small>{jobs.length} roles · automatic feed refresh every hour</small></div>
           {jobs.length ? <JobList jobs={jobs} open={setSelectedId} contacts={state.contacts} scanning={peopleScanning} find={job => scanPeople(false, false, job)}/> : <div className="plain-empty"><h2>No jobs match this view.</h2><p>Refresh jobs or adjust the source, location and date filters. LinkedIn listings arrive from your Chrome scans.</p></div>}
         </>}
       </>}
