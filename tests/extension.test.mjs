@@ -60,7 +60,7 @@ test('scan checks recent jobs before people, excludes saved profiles, and report
   assert.equal((await receive({ type: 'scan-people', payload: { limit: 20, cities: ['Delhi'], excludedProfiles: ['https://www.linkedin.com/in/saved-person/'] } }, { url: 'http://127.0.0.1:4318/' })).ok, true);
   await new Promise(resolve => setImmediate(resolve));
   assert.match(navigation[0], /\/jobs\/search\//);
-  assert.match(navigation[0], /f_TPR=r86400/);
+  assert.match(navigation[0], /f_TPR=r259200/);
   assert.equal(state.peopleScan.mode, 'all', 'every new scan includes founders');
   state.peopleScan.mode = 'team'; // This case isolates the job-to-team stages.
   const job = (id, company, location, recency) => ({ url: `https://www.linkedin.com/jobs/view/${id}/`, title: 'Product Designer', company, location, recency, searchLocation: 'Delhi', source: 'Job card' });
@@ -232,4 +232,15 @@ test('combined scan discovers startups on Google, verifies founders on LinkedIn 
   assert.equal(batch.payload.independentFounders,true); assert.equal(batch.payload.people[0].name,'Asha Rao');
   const result=messages.find(message=>message.type==='people-scan-results').payload;
   assert.equal(result.founders.length,1); assert.equal(result.people.length,0); assert.equal(state.peopleScan,undefined);
+});
+
+
+test('job details confirm employment without the legacy AboutTheJob marker', () => {
+  const source = readFileSync(new URL('../chrome-extension/jobs.js', import.meta.url), 'utf8').replace(/^\(\(\) => \{\s*/, '').replace('if (globalThis.__outreachDeskJobsHelper) return;', '').replace(/\s*run\(\)(?:\.catch[^\n]*)?;\s*\}\)\(\);\s*$/, '');
+  const panel = {innerText:'UX Designer Acme India 2 days ago Full-time',querySelectorAll:()=>[{innerText:'Full-time'}],querySelector:()=>null,matches:()=>false};
+  const link = {href:'https://www.linkedin.com/jobs/view/123/?trackingId=x',parentElement:panel};
+  const context = {document:{body:{},querySelector:()=>null,querySelectorAll:()=>[link]},URL,location:{href:'https://www.linkedin.com/jobs/search-results/'},chrome:{runtime:{onMessage:{addListener(){}}}}};
+  runInNewContext(source+'\nthis.detail = jobDetail({url:"https://www.linkedin.com/jobs/view/123/"});',context);
+  assert.equal(context.detail.fullTime,true);
+  assert.equal(context.detail.recency,'2 days ago');
 });

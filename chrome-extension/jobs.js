@@ -4,10 +4,10 @@ globalThis.__outreachDeskJobsHelper = true;
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
 const fresh = value => {
-  if (/^(?:within\s+)?past 24 hours(?:\s+\(linkedin filter\))?$/i.test(String(value || '').trim())) return true;
+  if (/^(?:within\s+)?past (?:24 hours|3 days)(?:\s+\(linkedin filter\))?$/i.test(String(value || '').trim())) return true;
   if (/^(?:posted|reposted)?\s*(?:just now|today)$/i.test(value)) return true;
-  const match = String(value || '').match(/^(?:posted|reposted)?\s*(\d+)\s*(minute|hour)s?\s*ago$/i);
-  return !!match && Number(match[1]) * (match[2].toLowerCase() === 'hour' ? 60 : 1) < 1440;
+  const match = String(value || '').match(/^(?:posted|reposted)?\s*(\d+)\s*(minute|hour|day)s?\s*ago$/i);
+  return !!match && Number(match[1]) * ({minute:1,hour:60,day:1440}[match[2].toLowerCase()]) < 4320;
 };
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request?.type === 'scan-probe') { sendResponse({ ok: true, page: 'jobs' }); void run(); return; }
@@ -19,17 +19,19 @@ function postingAge(value) {
   return clean(value).match(/(?:\b(?:posted|reposted)\s+)?(?:just now|today|\d+\s*(?:minute|hour|day|week|month)s?\s*ago)\b/i)?.[0] || '';
 }
 function collect(context = {}) {
-  const filteredToPastDay = new URL(location.href).searchParams.get('f_TPR') === 'r86400';
+  const filteredToPastDay = /^r(?:86400|259200)$/.test(new URL(location.href).searchParams.get('f_TPR') || '');
   const cards = [...document.querySelectorAll(jobCards)];
   const jobs = [];
   for (const card of cards) {
     const cardId = card.getAttribute('componentkey')?.match(/^job-card-component-ref-(\d+)$/)?.[1];
     if (cardId) {
       const parts = [...card.querySelectorAll('p')].map(part => clean(part.innerText)).filter(Boolean);
-      const title = clean(card.querySelector('p')?.innerText?.split('\n').filter(Boolean).at(-1));
-      const company = parts[1] || '', locationText = parts[2] || '';
-      const visibleRecency = postingAge(parts.slice(3).join(' '));
-      const recency = visibleRecency || (filteredToPastDay ? 'Past 24 hours (LinkedIn filter)' : '');
+      const dismiss = [...card.querySelectorAll('button, [role=button]')].map(e => e.getAttribute('aria-label') || '').find(text => /^Dismiss .+ job$/i.test(text));
+      const title = dismiss ? clean(dismiss.replace(/^Dismiss /i, '').replace(/ job$/i, '')) : clean(card.querySelector('p')?.innerText?.split('\n').filter(Boolean).at(-1));
+      const titleInParts = parts[0] === title || parts[0]?.includes(title);
+      const company = parts[titleInParts ? 1 : 0] || '', locationText = parts[titleInParts ? 2 : 1] || '';
+      const visibleRecency = postingAge(parts.slice(titleInParts ? 3 : 2).join(' '));
+      const recency = visibleRecency || (filteredToPastDay ? (new URL(location.href).searchParams.get('f_TPR') === 'r259200' ? 'Past 3 days (LinkedIn filter)' : 'Past 24 hours (LinkedIn filter)') : '');
       if (title && company) jobs.push({ url: `https://www.linkedin.com/jobs/view/${cardId}/`, title, company, location: locationText, recency, searchLocation: context.city || '', source: clean(card.textContent).slice(0, 1200) });
       continue;
     }
@@ -42,7 +44,7 @@ function collect(context = {}) {
     const company = clean(card.querySelector('.job-card-container__primary-description, .base-search-card__subtitle, .job-card-container__company-name')?.textContent);
     const locationText = clean(card.querySelector('.job-card-container__metadata-item, .job-search-card__location')?.textContent);
     const visibleRecency = postingAge(card.querySelector('time, .job-search-card__listdate')?.textContent || card.innerText);
-    const recency = visibleRecency || (filteredToPastDay ? 'Past 24 hours (LinkedIn filter)' : '');
+    const recency = visibleRecency || (filteredToPastDay ? (new URL(location.href).searchParams.get('f_TPR') === 'r259200' ? 'Past 3 days (LinkedIn filter)' : 'Past 24 hours (LinkedIn filter)') : '');
     if (title && company) jobs.push({ url: url.href.replace(/\/$/, '') + '/', title, company, location: locationText, recency, searchLocation: context.city || '', source: clean(card.textContent).slice(0, 1200) });
   }
   return [...new Map(jobs.filter(job => fresh(job.recency)).map(job => [job.url, job])).values()].slice(0, 30);
@@ -116,18 +118,20 @@ async function applyFilters(city) {
 function jobDetail(job) {
   const id = job.url.match(/\/view\/(\d+)/)?.[1];
   const link = [...document.querySelectorAll('a[href*="/jobs/view/"]')].find(element => new URL(element.href, location.href).pathname === `/jobs/view/${id}/`);
-  if (!link) return null;
-  let panel = link.parentElement;
+  const about = document.querySelector(`[componentkey="JobDetails_AboutTheJob_${id}"]`);
+  if (!link && !about) return null;
+  let panel = link?.parentElement || about.parentElement;
   while (panel && panel !== document.body) {
-    if (panel.querySelector(`[componentkey="JobDetails_AboutTheJob_${id}"]`) || panel.matches('.jobs-search__job-details--container, .jobs-details')) break;
+    const hasEmployment = [...panel.querySelectorAll('a, button, span, p')].some(e => /^(?:full[ -]time|part[ -]time|contract|internship|temporary)$/i.test(clean(e.innerText)));
+    if (panel.querySelector(`[componentkey="JobDetails_AboutTheJob_${id}"]`) || panel.matches('.jobs-search__job-details--container, .jobs-details') || (hasEmployment && !panel.querySelector('[componentkey^="job-card-component-ref-"]'))) break;
     panel = panel.parentElement;
   }
   if (!panel || panel === document.body) return null;
-  const employment = [...panel.querySelectorAll('a, button, .job-details-jobs-unified-top-card__job-insight')].map(element => clean(element.innerText)).find(text => /^(?:full[ -]time|part[ -]time|contract|internship|temporary)$/i.test(text));
+  const employment = [...panel.querySelectorAll('a, button, span, p, .job-details-jobs-unified-top-card__job-insight')].map(element => clean(element.innerText)).find(text => /^(?:full[ -]time|part[ -]time|contract|internship|temporary)$/i.test(text));
   if (!employment) return null;
   return { fullTime: /^full[ -]time$/i.test(employment), recency: postingAge(panel.innerText), employment };
 }
-async function verifyEmployment(jobs, context) {
+async function verifyEmployment(jobs, context, partial) {
   const verified = [];
   const candidates = jobs.filter(job => designRole(job.title)).slice(0, 16);
   for (let index = 0; index < candidates.length; index += 1) {
@@ -140,11 +144,12 @@ async function verifyEmployment(jobs, context) {
       detail = await until(() => jobDetail(job), 1800);
     }
     if (detail?.fullTime && (!detail.recency || fresh(detail.recency))) verified.push({ ...job, recency: detail.recency || job.recency, employmentType: 'Full-time', source: `${job.source}\nEmployment verified in job details: ${detail.employment}` });
+    partial.jobs = verified;
     await chrome.runtime.sendMessage({ type: 'scan-page-heartbeat', stageId: context.stageId, detail: `Verifying full-time jobs ${index + 1}/${candidates.length} · ${verified.length} confirmed` }).catch(() => {});
   }
   return verified;
 }
-async function scanPage(context) {
+async function scanPage(context, partial) {
   if (document.readyState === 'loading') await Promise.race([new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true })), sleep(5000)]);
   await until(() => collect(context).length || /no matching jobs|no results found/i.test(document.body.innerText), 12000);
   await applyFilters(context.city || 'India');
@@ -161,7 +166,7 @@ async function scanPage(context) {
   }
   const jobs = [...found.values()];
   const fullTimeFilter = fullTimeSelected() && jobs.every(job => job.employmentType === 'Full-time');
-  const verified = fullTimeFilter ? jobs : await verifyEmployment(jobs, context);
+  const verified = fullTimeFilter ? jobs : await verifyEmployment(jobs, context, partial);
   return { jobs: verified.filter(job => job.employmentType === 'Full-time'), diagnostics: { cardsSeen: document.querySelectorAll(jobCards).length, recentCards: jobs.length, fullTimeJobs: verified.length, employmentCheck: fullTimeFilter ? 'search filter' : 'individual job details', url: location.href } };
 }
 async function run() {
@@ -171,8 +176,9 @@ async function run() {
   if (!context?.stageId || context.stageId === completedStage) { running = false; return; }
   const heartbeat = setInterval(() => chrome.runtime.sendMessage({ type: 'scan-page-heartbeat', stageId: context.stageId }).catch(() => {}), 8000);
   let deadline;
+  const partial = { jobs: [], diagnostics: {} };
   try {
-    const result = await Promise.race([scanPage(context), new Promise((_, reject) => { deadline = setTimeout(() => reject(Error(`LinkedIn jobs page for ${context.city} took too long; continuing with the next search.`)), 60000); })]);
+    const result = await Promise.race([scanPage(context, partial), new Promise((resolve) => { deadline = setTimeout(() => resolve({ ...partial, error: `LinkedIn jobs page for ${context.city} timed out; kept ${partial.jobs.length} verified jobs and continued.` }), 60000); })]);
     await chrome.runtime.sendMessage({ type: 'jobs-scan-page', payload: { ...result, stageId: context.stageId } }).catch(() => {});
   } catch (error) {
     await chrome.runtime.sendMessage({ type: 'jobs-scan-page', payload: { jobs: [], error: error.message, stageId: context.stageId } }).catch(() => {});

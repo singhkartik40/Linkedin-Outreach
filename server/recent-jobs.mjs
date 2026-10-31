@@ -1,12 +1,12 @@
-const DAY_MINUTES = 24 * 60;
+const DAY_MINUTES = 72 * 60;
 
 export function recentJobMinutes(value) {
   const label = String(value || '').trim();
-  if (/^(?:within\s+)?past 24 hours(?:\s+\(linkedin filter\))?$/i.test(label)) return 0;
+  if (/^(?:within\s+)?past (?:24 hours|3 days)(?:\s+\(linkedin filter\))?$/i.test(label)) return 0;
   if (/^(?:posted|reposted)?\s*(?:just now|today)$/i.test(label)) return 0;
-  const match = label.match(/^(?:posted|reposted)?\s*(\d+)\s*(minute|hour)s?\s*ago$/i);
+  const match = label.match(/^(?:posted|reposted)?\s*(\d+)\s*(minute|hour|day)s?\s*ago$/i);
   if (!match) return null;
-  return Number(match[1]) * (match[2].toLowerCase() === 'hour' ? 60 : 1);
+  return Number(match[1]) * ({minute:1,hour:60,day:1440}[match[2].toLowerCase()]);
 }
 
 export function isLatestJob(job) {

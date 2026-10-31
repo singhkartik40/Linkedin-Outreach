@@ -10,7 +10,7 @@ export type Contact = { companyLimit?: { blocked: boolean; count: number; reason
 type State = { jobBoardSources?: Record<string, { status: string; syncedAt?: string; count?: number; delay: string }>; discoverySchedule?: { enabled: boolean; nextRunAt: number; lastRunAt: number | null; lastStatus: string; lastAdded: number; leaseUntil: number }; provider: null | { provider: string; model: string; baseUrl: string; hasKey: boolean }; google: { connected: boolean; configured: boolean; readOnly: boolean; writeConfigured: boolean }; spreadsheetId: string; tracker: null | { title: string; rowCount: number; syncedAt: string; tabs: string[]; headers: string[]; missingTabs: string[]; missingHeaders: string[]; schemaValid: boolean }; jobs: Job[]; contacts: Contact[]; events: { id: string; kind: string; message: string; created_at: string }[]; sending: { available: boolean; reason: string }; automation: { autoSync: boolean; desiredSending: string } };
 type Page = 'Overview' | 'Outreach' | 'Job research' | 'Tracker' | 'Automation' | 'Settings';
 const providerNames: Record<string, string> = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', nvidia: 'NVIDIA NIM', chutes: 'Chutes AI', compatible: 'OpenAI-compatible' };
-const helperVersion = '0.6.4';
+const helperVersion = '0.6.5';
 const labels: Record<string, string> = { title: 'Job title', company: 'Company', location: 'Location', postedAt: 'Exact posted time', experienceMin: 'Minimum experience (years)', experienceFlexible: 'Experience is flexible', salaryLpa: 'Minimum salary (₹ LPA)', saturdayWork: 'Saturday work', roleCategory: 'Role category', applicationOpen: 'Applications open' };
 async function api(path: string, data?: unknown) {
   const response = await fetch(`/api${path}`, data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
@@ -126,6 +126,7 @@ function App() {
           ? `Checked ${jobsResult.fresh} recent jobs but found no new matching people. People already saved in your list are skipped.`
           : `Scan complete: checked ${jobsResult.fresh} recent jobs and added ${result.added} new people${event.data.payload.mode === 'all' ? ` (${result.added - result.addedFounders} designers/HR, ${result.addedFounders} founders)` : result.added < 20 ? ' (fewer than 20 matches were available)' : ''}. ${result.total} contacts are saved.`;
         if (event.data.payload.targeted) { setPage('Outreach'); setDiscoveryMode('team'); }
+        for (const warning of event.data.payload.warnings || []) scanWarnings.current.add(warning);
         const skipped = event.data.payload.warnings?.length || 0;
         setNotice({ text: `${text}${skipped ? ` ${skipped} searches could not be checked; this scan is partial.` : ''}${scanWarnings.current.size ? ` ${[...scanWarnings.current].join(' ')}` : ''}`, error: result.added === 0 || skipped > 0 || scanWarnings.current.size > 0 });
       } catch (error) { await finishDiscovery((error as Error).message); setNotice({ text: (error as Error).message, error: true }); await refresh(); }
@@ -235,7 +236,7 @@ function App() {
       <div className="workspace"><span className="avatar">KS</span><div>Kartik’s workspace<small>Personal · Local</small></div><span className="workspace-dot"/></div>
       
       <nav aria-label="Main navigation">{(['Overview', 'Outreach', 'Job research', 'Tracker', 'Automation', 'Settings'] as Page[]).map(item => <button key={item} className={page === item ? 'nav-item active' : 'nav-item'} onClick={() => go(item)} aria-current={page === item ? 'page' : undefined}><Icon name={item}/>{item}{item === 'Outreach' && !!state?.contacts.length && <span className="nav-count">{state.contacts.length}</span>}{item === 'Job research' && !!state?.jobs.length && <span className="nav-count">{state.jobs.length}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><span className="local-dot"/> Running on your computer<p>Private workspace</p><span className="version">LOCAL BUILD · v0.6.4</span></div>
+      <div className="sidebar-bottom"><span className="local-dot"/> Running on your computer<p>Private workspace</p><span className="version">LOCAL BUILD · v0.6.5</span></div>
     </aside>
     <div className="main-shell"><header className="topbar"><span>Workspace <span className="slash">/</span> <strong>{page}</strong></span><div><span className="timezone">India · IST</span><span className="mini-avatar">KS</span></div></header>
     <main>

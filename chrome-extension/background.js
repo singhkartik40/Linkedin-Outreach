@@ -2,10 +2,10 @@ const LOCAL_ORIGIN = 'http://127.0.0.1:4318';
 const NOTE_LIMIT = 290;
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
 const fresh = value => {
-  if (/^(?:within\s+)?past 24 hours(?:\s+\(linkedin filter\))?$/i.test(String(value || '').trim())) return true;
+  if (/^(?:within\s+)?past (?:24 hours|3 days)(?:\s+\(linkedin filter\))?$/i.test(String(value || '').trim())) return true;
   if (/^(?:posted|reposted)?\s*(?:just now|today)$/i.test(value)) return true;
-  const match = String(value || '').match(/^(?:posted|reposted)?\s*(\d+)\s*(minute|hour)s?\s*ago$/i);
-  return !!match && Number(match[1]) * (match[2].toLowerCase() === 'hour' ? 60 : 1) < 1440;
+  const match = String(value || '').match(/^(?:posted|reposted)?\s*(\d+)\s*(minute|hour|day)s?\s*ago$/i);
+  return !!match && Number(match[1]) * ({minute:1,hour:60,day:1440}[match[2].toLowerCase()]) < 4320;
 };
 const profileKey = value => { try { return new URL(value).pathname.replace(/\/$/, '').toLowerCase(); } catch { return ''; } };
 const contactRole = headline => /\b(?:co[ -]?)?founder\b/i.test(headline || '') ? 'founder' : /recruit|talent|human resources|\bhr\b/i.test(headline || '') ? 'talent' : /(?:product|ux|ui|user experience|interaction)\s*(?:\/\s*ux\s*)?design|design(?:er| lead| manager| director)|head of design/i.test(headline || '') ? 'designer' : '';
@@ -18,7 +18,7 @@ const matchesContactLocation = (jobLocation, personLocation) => {
 };
 const eligibleJob = job => /(?:product|ux|ui|user experience|interaction).*design|design.*(?:product|ux|ui)/i.test(job.title || '') && !/\bintern(?:ship)?\b|\bcontract\b|part[ -]time|freelance|temporary/i.test(`${job.title} ${job.source || ''}`);
 const searchUrl = (company, role = 'designer') => `https://www.linkedin.com/search/results/people/?keywords=${encodeURIComponent(`${company} ${role === 'founder' ? '(founder OR cofounder)' : role === 'designer' ? '(designer OR "design lead" OR "design manager")' : '(recruiter OR "talent acquisition" OR "human resources")'}`)}`;
-const searchesFor = cities => cities.flatMap(location => ['Product Designer', 'UX Designer'].map(keywords => `https://www.linkedin.com/jobs/search/?${new URLSearchParams({ keywords, location, ...(location === 'India' ? { geoId: '102713980' } : {}), f_TPR: 'r86400', f_JT: 'F', sortBy: 'DD' })}`));
+const searchesFor = cities => cities.flatMap(location => ['Product Designer', 'UX Designer'].map(keywords => `https://www.linkedin.com/jobs/search/?${new URLSearchParams({ keywords, location, ...(location === 'India' ? { geoId: '102713980' } : {}), f_TPR: 'r259200', f_JT: 'F', sortBy: 'DD' })}`));
 function matchesCity(location, cities = ['India'], country = '', searchLocation = '') {
   if (!Array.isArray(cities) || cities.length === 0 || cities.includes('India')) return country === 'India' || isIndianLocation(location);
   const normalize = value => String(value || '').toLowerCase().replace(/bangalore/g, 'bengaluru').replace(/gurgaon/g, 'gurugram').replace(/bombay/g, 'mumbai');

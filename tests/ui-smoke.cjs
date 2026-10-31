@@ -62,7 +62,7 @@ const assert = require('node:assert/strict');
       window.addEventListener('message', event => {
         if (event.source !== window || event.data?.source !== 'outreach-desk' || !['ping-helper', 'scan-people'].includes(event.data?.type)) return;
         const send = (type, payload) => window.postMessage({ source: 'outreach-desk-helper', type, payload }, location.origin);
-        window.postMessage({ source: 'outreach-desk-helper', requestId: event.data.requestId, ok: true, version: '0.6.4' }, location.origin);
+        window.postMessage({ source: 'outreach-desk-helper', requestId: event.data.requestId, ok: true, version: '0.6.5' }, location.origin);
         if (event.data.type === 'ping-helper') return;
         if (!event.data.payload.job && !['team','all','founders'].includes(event.data.payload.mode)) throw new Error('A scan must specify its audience');
         setTimeout(() => send('people-scan-progress', { phase: 'jobs', percent: 30, detail: 'Checking 2 recent jobs', jobsFound: 1, peopleFound: 0 }), 60);

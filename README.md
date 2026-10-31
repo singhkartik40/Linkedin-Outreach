@@ -270,3 +270,7 @@ Designers & HR searches check recent full-time design jobs, then up to two desig
 India-only Jobicy feeds refresh hourly; Remotive stays on a six-hour cache in line with its recommended maximum four daily requests. Automatic combined LinkedIn/team/founder scans run hourly while the dashboard is open in signed-in Chrome. This does not import every LinkedIn listing: there is no configured LinkedIn jobs API, and coverage depends on visible search results and source availability. Jobicy/Remotive retain their source publication delays.
 
 Discovery imports always append unique contacts, including refresh runs; saved drafts are never replaced. The job board defaults to the past three days with 24-hour, 48-hour and three-day filters. Unverified dates have their own filter. Per-job searches accept verified full-time design roles within three days.
+
+## LinkedIn layout fix (v0.6.5)
+
+Reload helper v0.6.5 and refresh the dashboard. The scanner reads current LinkedIn cards when the title is outside the usual paragraph sequence, verifies full-time evidence without requiring the removed legacy detail marker, and uses the same three-day window throughout scanning and imports. If a page times out, verified jobs already collected are retained. Scan notices now include the actual warning text.
