@@ -164,14 +164,16 @@ const server = http.createServer(async (req, res) => {
       await ensureFreshTracker();
       const input = await body(req), current = store.get('contacts', []), known = new Set(current.map(contact => profileSlug(contact.profileUrl)));
       let added = 0, rejected = 0;
+      const warnings = [];
       for (const person of (Array.isArray(input.people) ? input.people : []).slice(0, 20)) {
-        let contact; try { contact = founderFromDiscovery(person); } catch { rejected++; continue; }
+        let contact; try { contact = founderFromDiscovery(person); } catch (error) { rejected++; warnings.push(`${String(person.name || 'Founder').replace(/\s+/g, ' ').slice(0, 100)}: ${error.message}`); continue; }
         const slug = profileSlug(contact.profileUrl);
         if (companyOutreachLimit(contact, store.get('tracker'), current).blocked || known.has(slug) || current.filter(item => item.company.toLowerCase() === contact.company.toLowerCase() && item.contactRole === 'founder').length >= 2) continue;
         current.push(contact); known.add(slug); added++;
       }
       store.set('contacts', current);
-      return reply(res, 200, { added, addedFounders: added, rejected, total: current.length });
+      if (warnings.length) store.event('discovery', warnings.join(' '));
+      return reply(res, 200, { added, addedFounders: added, rejected, warnings, total: current.length });
     }
     if (url.pathname === '/api/settings/provider' && req.method === 'POST') {
       const input = await body(req), config = validateProvider(input);
@@ -271,7 +273,7 @@ const server = http.createServer(async (req, res) => {
       if (!contact) return reply(res, 404, { error: 'Contact not found.' });
       if (contact.companyLimit.blocked) throw new Error(contact.companyLimit.reason);
       if (contact.outreachBlocked) throw new Error('This contact is not clear for outreach. Refresh the tracker and check the contact.');
-      return reply(res, 200, { receiptToken: beginOutreach(contact) });
+      return reply(res, 200, { receiptToken: beginOutreach(contact), message: contact.message });
     }
     if (/^\/api\/contacts\/[\w-]+\/confirm-from-helper$/.test(url.pathname) && req.method === 'POST') {
       const id = url.pathname.split('/')[3], contact = store.get('contacts', []).find(item => item.id === id);

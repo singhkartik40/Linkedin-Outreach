@@ -22,13 +22,13 @@ export function CityPicker({ cities, change, disabled }: { cities: string[]; cha
 }
 
 type Props = {
-  contacts: Contact[]; jobs: Job[]; initialId: string | null;
+  scanning?: boolean; scanDetail?: string; contacts: Contact[]; jobs: Job[]; initialId: string | null;
   send: (contact: Contact) => void; done: (contact: Contact) => Promise<void>; retry: (contact: Contact) => Promise<void>;
   save: (contact: Contact, input: unknown) => Promise<void>;
   action: (contact: Contact, input: unknown) => Promise<void>;
 };
 
-export function OutreachBoard({ contacts, jobs, initialId, send, done, retry, save, action }: Props) {
+export function OutreachBoard({ scanning, scanDetail, contacts, jobs, initialId, send, done, retry, save, action }: Props) {
   const [tab, setTab] = useState('Active'), [query, setQuery] = useState(''), [company, setCompany] = useState('All companies'), [sort, setSort] = useState('newest');
   const [expanded, setExpanded] = useState<string | null>(initialId), [selected, setSelected] = useState<string[]>([]), [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean } | null>(null);
@@ -71,7 +71,7 @@ export function OutreachBoard({ contacts, jobs, initialId, send, done, retry, sa
           <td><div className="row-actions">{contact.deletedAt ? <button className="button secondary table-action" disabled={pending} onClick={() => perform(() => action(contact, { action: 'restore' }), 'Contact restored.')}>Restore contact</button> : <>{!isDone(contact) && <button className="button primary table-action" disabled={pending || contact.outreachBlocked} onClick={() => send(contact)}>Send outreach</button>}{editable && contact.status === 'Draft ready' && <label className="done-check"><input type="checkbox" aria-label="Mark done" disabled={pending} checked={false} onChange={() => perform(() => done(contact), 'Delivery confirmation processed. Check the tracker status.')}/> Mark done</label>}{contact.status === 'Send confirmed' && <button className="text-button" disabled={pending} onClick={() => perform(() => retry(contact), 'Sheet retry processed.')}>Retry Sheet update</button>}<details className="row-menu"><summary>More actions</summary><button disabled={pending} onClick={() => copy(contact.profileUrl, 'Profile link')}>Copy profile link</button><button disabled={pending} onClick={() => copy(`${contact.name}\n${contact.company}\n${contact.profileUrl}\n${contact.jobUrl}\n${contact.message}`, 'Contact details')}>Copy all details</button>{editable && <button disabled={pending} onClick={() => perform(() => save(contact, { status: contact.status === 'Skipped' ? 'Draft ready' : 'Skipped' }), contact.status === 'Skipped' ? 'Contact returned to queue.' : 'Contact skipped.')}>{contact.status === 'Skipped' ? 'Return to queue' : 'Skip for now'}</button>}<button disabled={pending} className="danger" onClick={() => remove([contact])}>Delete contact</button></details></>}</div></td>
         </tr>{expanded === contact.id && <tr className="contact-expanded"><td colSpan={6}><DraftEditor key={`${contact.id}:${contact.updatedAt || ''}:${contact.message}`} contact={contact} editable={editable} pending={pending} save={input => perform(() => save(contact, input), 'Message saved. Previous version kept.')} action={input => perform(() => action(contact, input), 'Message history updated.')} copy={copy}/></td></tr>}</Fragment>;
       })}
-    </tbody></table>{!visible.length && <div className="plain-empty"><h3>{tab === 'Active' ? 'No matching contacts in your queue.' : `No ${tab.toLowerCase()} contacts.`}</h3><p>Adjust your filters or start a new scan using the cities above.</p></div>}</div>
+    </tbody></table>{!visible.length && <div className="plain-empty"><h3>{tab === 'Active' ? scanning ? 'Scan in progress — contacts will appear here as they are verified.' : 'No matching contacts in your queue.' : `No ${tab.toLowerCase()} contacts.`}</h3><p>{scanning ? scanDetail || 'Checking jobs and matching current employees. You can keep using this dashboard.' : 'Adjust your filters or start a new scan using the cities above.'}</p></div>}</div>
     <div className="queue-footer"><span>Showing {visible.length} of {filtered.length} contacts</span><span>Delete is recoverable · Mark done follows a confirmed send</span></div>
   </section>;
 }

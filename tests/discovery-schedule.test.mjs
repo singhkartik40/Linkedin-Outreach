@@ -20,3 +20,13 @@ test('pause stops automatic runs; manual runs and abandoned-run recovery remain 
  assert.ok(run);
  assert.ok(claimSchedule(run,false,run.leaseUntil+1));
 });
+
+test('stopping a scan leaves hourly discovery enabled but prevents an immediate overdue restart', () => {
+ const run = claimSchedule(initialSchedule(0), false, 0);
+ const stopped = finishSchedule(run, run.runId, 'Stopped by user', 3, INTERVAL + 1000);
+ assert.equal(stopped.enabled, true);
+ assert.equal(stopped.runId, null);
+ assert.equal(stopped.lastAdded, 3);
+ assert.equal(stopped.nextRunAt, INTERVAL * 2 + 1000);
+ assert.equal(claimSchedule(stopped, true, INTERVAL + 1001), null);
+});

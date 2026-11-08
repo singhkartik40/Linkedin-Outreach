@@ -4,6 +4,21 @@ export const portfolioUrl = 'https://karteek.work';
 export const resumeUrl = 'https://drive.google.com/file/d/16hilLHZ3_4nvYX56vPKkKpMFjUqpk1oN/view?usp=sharing';
 export const requiredPhrase = 'I believe I’d be a strong fit.';
 
+export function validateOutreachMessage(message) {
+  if (typeof message !== 'string' || !message.trim() || message.length > outreachCharacterLimit) {
+    throw new Error('The outreach message must be 1–290 characters.');
+  }
+  const urls = message.match(/https?:\/\/[^\s<>"']+/g) || [];
+  const hasResume = urls.some(url => {
+    let end = url.length;
+    while (end > 0 && '),.;!?'.includes(url[end - 1])) end -= 1;
+    return url.slice(0, end) === resumeUrl;
+  });
+  if (!hasResume) {
+    throw new Error(`The full resume link is missing or changed. Edit the message to include ${resumeUrl} before sending.`);
+  }
+}
+
 export function buildOutreachMessage({ name, company, jobTitle, headline = '' }) {
   const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
   const first = clean(name).split(' ')[0];

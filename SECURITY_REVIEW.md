@@ -107,3 +107,23 @@ Validation: 73 unit/API tests passed, including writer settings surviving a serv
 Manual team and founder scans now use explicit independent audiences; UI tabs remain available and the other search can be queued. Scan concurrency remains serialized through the existing server lease and extension state. Helper-created research tabs close on completion. India-only feed filtering remains enforced; direct LinkedIn job refresh searches India. Jobicy refreshes hourly; Remotive retains six-hour caching per its documented recommendation. Scheduled Chrome discovery runs hourly while the dashboard is open.
 
 73 unit/API tests and production build passed. An isolated Chrome extension run found 20 team contacts, then 10 startup founders in a separate run, and verified automatic completion after an edited note and a simulated lost response. No real invitations were sent during these checks.
+
+## 31 October 2026 — v0.6.6 live discovery
+
+Job discovery now alternates pairs of job searches with current-employee searches, instead of waiting for every location to finish first. Each accepted person is streamed immediately through the existing import validation, tracker deduplication and company/posting limits. Active empty queues display the current scan stage. Delayed job details get five seconds to expose employment evidence; unverified jobs remain excluded. No browser permissions or external destinations were added.
+
+Validation: 75 unit/API tests, production build, Chrome dashboard smoke tests and the unpacked-extension integration test passed. The signed-in Chrome run displayed four new real contacts while subsequent company searches continued. No real invitations were sent during these checks. Existing static-analysis findings above remain tracked.
+
+## 2 November 2026 — v0.6.7 no-toast sends and shorter waits
+
+Pending detection accepts visible links plus accessible Pending/withdraw-invitation labels. When a user clicks Send on the standalone invitation page and its editor disappears without a success toast, the helper returns to the same recipient's profile and requires Pending before confirming delivery. Visible failure notices prevent this return. Existing Pending controls and dialog closure alone do not confirm a send. Send polling is 250 ms with the original one-minute observation window. No new permissions or external destinations were added.
+
+People scans skip the company-filter round trip only when at least two visible profiles already supply matching current-company and role evidence. Import, geography, duplicates and company limits remain enforced.
+
+Validation: 82 unit/API tests and production build passed. Isolated unpacked Chrome integration verified a blank invitation page without a toast, profile Pending readback, automatic completion and recovery after a lost API response. Browser integration preceded the polling/scan wait optimization; dedicated regression tests cover those later changes. No real outreach was sent and the user's active browser was not changed. Existing security findings remain tracked above.
+
+## 2 November 2026 — v0.6.8 close completed outreach tabs
+
+Confirmed delivery receipts retain their LinkedIn tab ID and recipient URL. After the local dashboard acknowledges completion using the matching receipt token, the helper closes that tab only if it still displays the matching recipient profile or invitation page. Unacknowledged deliveries, incorrect tokens, untrusted origins, unrelated profiles and tabs navigated elsewhere cannot trigger closing. The dashboard remains open. No new extension permissions were added.
+
+Validation: 83 unit/API tests and production build passed. Isolated unpacked Chrome integration verified automatic tab closing after completion acknowledgement, including a blank invitation page without a toast and a lost API response. The same test verified that the dashboard remains open. No real invitations were sent.

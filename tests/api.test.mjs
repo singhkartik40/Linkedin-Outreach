@@ -95,8 +95,14 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     assert.ok(peopleState.contacts[0].message.includes('16hilLHZ3_4nvYX56vPKkKpMFjUqpk1oN/view?usp=sharing'));
     assert.equal((await post(`/contacts/${contactId}`, { message: 'x'.repeat(291) })).status, 400);
     assert.equal((await (await fetch(`${base}/api/state`)).json()).contacts[0].message, peopleState.contacts[0].message);
+    await post(`/contacts/${contactId}`, { message: 'Edited draft without a resume link.' });
+    const missingResume = await post(`/contacts/${contactId}/prepare`, {});
+    assert.equal(missingResume.status, 400);
+    assert.match((await missingResume.json()).error, /full resume link/);
+    await post(`/contacts/${contactId}`, { message: peopleState.contacts[0].message });
     const prepared = await (await post(`/contacts/${contactId}/prepare`, {})).json();
     assert.ok(prepared.receiptToken);
+    assert.equal(prepared.message, peopleState.contacts[0].message, 'handoff uses the exact validated message');
     const confirm = () => post(`/contacts/${contactId}/confirm-from-helper`, { receiptToken: prepared.receiptToken });
     assert.equal((await confirm()).status, 200);
     assert.equal((await (await confirm()).json()).alreadyDone, true);
@@ -137,6 +143,10 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     const independent = {...founder,name:'Independent Founder',company:'Independent Startup',headline:'Founder at Independent Startup',profileUrl:'https://www.linkedin.com/in/independent-founder/',startupSourceUrl:'https://www.linkedin.com/company/independent-startup/',googleUrl:'https://www.google.com/search?q=startup',evidence:'Founder at Independent Startup'};
     const independentResult=await (await post('/founders/import',{people:[independent]})).json();
     assert.equal(independentResult.added,1);
+    const rejectedFounder = await (await post('/founders/import', { people: [{ ...independent, name: 'Mismatched Founder', profileUrl: 'https://www.linkedin.com/in/mismatched-founder/', headline: 'Founder at Other' }] })).json();
+    assert.equal(rejectedFounder.rejected, 1);
+    assert.ok(Array.isArray(rejectedFounder.warnings), 'rejected founders include a visible reason');
+    assert.match(rejectedFounder.warnings.join(' '), /current employment/);
     assert.equal((await (await post('/founders/import',{people:[independent]})).json()).added,0);
     const independentContact=(await (await fetch(`${base}/api/state`)).json()).contacts.find(contact=>contact.name===independent.name);
     assert.equal(independentContact.jobId,''); assert.doesNotMatch(independentContact.message,/opening|refer me/);

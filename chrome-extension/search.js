@@ -1,7 +1,9 @@
 (() => {
+if (globalThis.__outreachDeskPeopleHelper) return;
+globalThis.__outreachDeskPeopleHelper = true;
 const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, milliseconds));
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
-  if (request?.type === 'scan-probe') { sendResponse({ ok: true, page: 'people' }); void run(); return; }
+  if (request?.type === 'scan-probe') { sendResponse({ ok: true, page: 'people' }); void run().catch(() => {}); }
 });
 let running = false, completedStage = '';
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
@@ -79,10 +81,16 @@ async function run() {
   if (document.readyState === 'loading') await Promise.race([new Promise(resolve => document.addEventListener('DOMContentLoaded', resolve, { once: true })), sleep(5000)]);
   const context = await chrome.runtime.sendMessage({ type: 'scan-context' }).catch(() => null);
   if (!context?.company || context.stageId === completedStage) { running = false; return; }
-  const heartbeat = setInterval(() => chrome.runtime.sendMessage({ type: 'scan-page-heartbeat', stageId: context.stageId }).catch(() => {}), 8000);
+  const heartbeat = setInterval(async () => {
+    try { await chrome.runtime.sendMessage({ type: 'scan-page-heartbeat', stageId: context.stageId }); }
+    catch { clearInterval(heartbeat); }
+  }, 8000);
   try {
   let pageFiltered = new URL(location.href).searchParams.has('currentCompany');
-  if (!pageFiltered) {
+  // Skip the extra filter round-trip when visible headlines already prove the employer and role.
+  const rolePattern = context.role === 'designer' ? /design|user experience/i : /recruit|talent|human resources|\bhr\b/i;
+  const readyMatches = collect(context.company, pageFiltered).filter(person => rolePattern.test(person.headline));
+  if (!pageFiltered && readyMatches.length < 2) {
     const applied = await applyCompanyFilter(context.company);
     if (applied) {
       for (let attempt = 0; attempt < 40 && !new URL(location.href).searchParams.has('currentCompany'); attempt += 1) await sleep(200);
@@ -97,11 +105,11 @@ async function run() {
   for (let i = 0; i < 2; i += 1) { window.scrollTo(0, document.body.scrollHeight); await sleep(400); }
   const hasNextPage = [...document.querySelectorAll('button, a')].some(element => visible(element) && !element.disabled && element.getAttribute('aria-disabled') !== 'true' && /^(?:next|next page)$/i.test(clean(element.getAttribute('aria-label') || element.innerText)));
   const people = collect(context.company, pageFiltered);
-  chrome.runtime.sendMessage({ type: 'people-scan-page', payload: { people, verifiedCompany: pageFiltered || people.length > 0, hasNextPage, stageId: context.stageId } });
+  void chrome.runtime.sendMessage({ type: 'people-scan-page', payload: { people, verifiedCompany: pageFiltered || people.length > 0, hasNextPage, stageId: context.stageId } }).catch(() => {});
   } catch (error) {
     chrome.runtime.sendMessage({ type: 'people-scan-page', payload: { people: [], verifiedCompany: false, error: error.message, stageId: context.stageId } }).catch(() => {});
   } finally { completedStage = context.stageId; running = false; clearInterval(heartbeat); }
 }
-run();
+run().catch(() => {});
 
 })();

@@ -155,7 +155,7 @@ test('a loading jobs page is not reloaded before its content script can attach',
 });
 
 test('people scanner reads current LinkedIn profile cards', () => {
-  const source = readFileSync(new URL('../chrome-extension/search.js', import.meta.url), 'utf8').replace(/^\(\(\) => \{\s*/, '').replace(/\s*run\(\)(?:\.catch[^\n]*)?;\s*\}\)\(\);\s*$/, '');
+  const source = readFileSync(new URL('../chrome-extension/search.js', import.meta.url), 'utf8').replace(/^\(\(\) => \{\s*/, '').replace('if (globalThis.__outreachDeskPeopleHelper) return;', '').replace(/\s*run\(\)(?:\.catch[^\n]*)?;\s*\}\)\(\);\s*$/, '');
   const card = {
     href: 'https://www.linkedin.com/in/jane-doe/', innerText: 'Jane Doe\n • 2nd\nRecruiter at Acme\nIndia\nConnect',
     matches: selector => selector === 'a[href*="/in/"]', getClientRects: () => [1],
@@ -243,4 +243,62 @@ test('job details confirm employment without the legacy AboutTheJob marker', () 
   runInNewContext(source+'\nthis.detail = jobDetail({url:"https://www.linkedin.com/jobs/view/123/"});',context);
   assert.equal(context.detail.fullTime,true);
   assert.equal(context.detail.recency,'2 days ago');
+});
+
+
+test('job discovery interleaves people searches and streams contacts individually', async () => {
+  let listener;
+  const state={peopleScan:{scanId:'live',tabId:42,phase:'jobs',mode:'team',jobIndex:1,searches:Array.from({length:4},(_,i)=>`https://www.linkedin.com/jobs/search/?location=India&keywords=UX&n=${i}`),cities:['India'],jobs:[],results:[],excludedProfiles:[],limit:20,warnings:[]}};
+  const messages=[],navigation=[];
+  const chrome={runtime:{onMessage:{addListener(fn){listener=fn;}}},storage:{local:{async get(){return {...state};},async set(v){Object.assign(state,v);},async remove(k){delete state[k];}}},tabs:{onUpdated:{addListener(){}},async query(){return [{id:9}];},async sendMessage(id,m){messages.push(m);},async update(id,opts){navigation.push(opts.url);}}};
+  runInNewContext(readFileSync(new URL('../chrome-extension/background.js',import.meta.url),'utf8'),{chrome,URL,URLSearchParams,Date,Math,Set,Map,Number,String,encodeURIComponent});
+  const receive=(request)=>new Promise(resolve=>listener(request,{tab:{id:42,url:'https://www.linkedin.com/search/results/people/'}},resolve));
+  await receive({type:'jobs-scan-page',payload:{jobs:[{url:'https://www.linkedin.com/jobs/view/123/',title:'UX Designer',company:'Acme',location:'India',recency:'2 hours ago'}]}});
+  assert.equal(state.peopleScan.phase,'people'); assert.equal(state.peopleScan.jobIndex,2);
+  assert.match(navigation.at(-1),/search\/results\/people/);
+  const people=[0,1].map(i=>({name:`Person ${i}`,headline:'UX Designer at Acme',location:'India',profileUrl:`https://www.linkedin.com/in/new-${i}/`}));
+  await receive({type:'people-scan-page',payload:{verifiedCompany:true,people}});
+  const batches=messages.filter(m=>m.type==='people-scan-batch');
+  assert.equal(batches.length,2); assert.ok(batches.every(m=>m.payload.people.length===1));
+  await receive({type:'people-scan-page',payload:{verifiedCompany:true,people:[]}});
+  assert.equal(state.peopleScan.phase,'jobs'); assert.match(navigation.at(-1),/n=2/);
+});
+
+test('ready verified people skip the company-filter round trip', async () => {
+  const source = readFileSync(new URL('../chrome-extension/search.js', import.meta.url), 'utf8').replace(/^\(\(\) => \{\s*/, '').replace('if (globalThis.__outreachDeskPeopleHelper) return;', '').replace(/\s*run\(\)(?:\.catch[^\n]*)?;\s*\}\)\(\);\s*$/, '');
+  const cards = [1, 2].map(id => ({ href: `https://www.linkedin.com/in/person-${id}/`, innerText: `Person ${id}\n • 2nd\nUX Designer at Acme\nIndia`, matches: () => true, getClientRects: () => [1] }));
+  let filterQueries = 0; const messages = [];
+  const document = { readyState: 'complete', body: { innerText: '', scrollHeight: 100 }, querySelector(selector) { if (selector.includes('Filter by Current')) filterQueries++; return selector.startsWith('a[componentkey') ? cards[0] : null; }, querySelectorAll: selector => selector.startsWith('a[componentkey') ? cards : [] };
+  const context = { document, location: { href: 'https://www.linkedin.com/search/results/people/' }, URL, Map, setTimeout: fn => { fn(); }, setInterval: () => 1, clearInterval() {}, window: { scrollTo() {} }, chrome: { runtime: { onMessage: { addListener() {} }, async sendMessage(message) { messages.push(message); return message.type === 'scan-context' ? { company: 'Acme', role: 'designer', stageId: 'people:0:designer:1' } : {}; } } } };
+  runInNewContext(readFileSync(new URL('../chrome-extension/employment.js', import.meta.url), 'utf8'), context);
+  await runInNewContext(source + '\nrun();', context);
+  assert.equal(filterQueries, 0);
+  assert.equal(messages.find(message => message.type === 'people-scan-page').payload.people.length, 2);
+});
+
+test('only an acknowledged send closes its matching LinkedIn tab', async () => {
+  let listener; const removed = [];
+  const receipt = { contactId: 'contact', receiptToken: 'secret', expiresAt: Date.now() + 60000, tabId: 42, profileUrl: 'https://www.linkedin.com/in/person/' };
+  const state = { confirmedDeliveries: [receipt] }; let currentUrl = receipt.profileUrl;
+  const chrome = { runtime: { onMessage: { addListener(fn) { listener = fn; } } }, storage: { local: { async get(key) { return Object.fromEntries([key].flat().map(name => [name, state[name]])); }, async set(value) { Object.assign(state, value); }, async remove(key) { delete state[key]; } } }, tabs: { onUpdated: { addListener() {} }, async get() { return { url: currentUrl }; }, async remove(id) { removed.push(id); }, async sendMessage() {} } };
+  runInNewContext(readFileSync(new URL('../chrome-extension/background.js', import.meta.url), 'utf8'), { chrome, URL, URLSearchParams });
+  const receive = (type, token = 'secret', origin = 'http://127.0.0.1:4318/', manual = false) => new Promise(resolve => listener({ type, payload: { contactId: 'contact', receiptToken: token, manual } }, { url: origin, tab: { id: 9 } }, resolve));
+  await receive('sync-deliveries'); assert.deepEqual(removed, []);
+  await receive('ack-delivery', 'wrong'); assert.deepEqual(removed, []);
+  await receive('ack-delivery', 'secret', 'https://example.com/'); assert.deepEqual(removed, []);
+  await receive('ack-delivery'); assert.deepEqual(removed, [42]);
+  await receive('ack-delivery'); assert.deepEqual(removed, [42], 'duplicate acknowledgements do not close again');
+  for (const url of ['https://www.linkedin.com/in/other/', 'http://127.0.0.1:4318/', 'https://example.com/in/person/']) {
+    state.confirmedDeliveries = [receipt]; currentUrl = url; await receive('ack-delivery'); assert.deepEqual(removed, [42]);
+  }
+  state.confirmedDeliveries = [receipt]; currentUrl = 'https://www.linkedin.com/preload/custom-invite/?vanityName=person';
+  await receive('ack-delivery'); assert.deepEqual(removed, [42, 42]);
+  state.outreachSession = receipt;
+  state.pendingOutreach = { receiptToken: receipt.receiptToken };
+  await receive('ack-delivery'); assert.equal(removed.length, 2, 'a session without delivery evidence stays open');
+  await receive('ack-delivery', 'wrong', 'http://127.0.0.1:4318/', true); assert.equal(removed.length, 2);
+  await receive('ack-delivery', 'secret', 'http://127.0.0.1:4318/', true);
+  assert.deepEqual(removed, [42, 42, 42]);
+  assert.equal(state.outreachSession, undefined);
+  assert.equal(state.pendingOutreach, undefined);
 });

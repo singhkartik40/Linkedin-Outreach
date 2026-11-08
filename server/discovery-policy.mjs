@@ -1,4 +1,4 @@
-export const contactRole = headline => /\b(?:co[ -]?)?founder\b/i.test(headline || '') ? 'founder' : /recruit|talent|human resources|\bhr\b/i.test(headline || '') ? 'talent' : /design|user experience/i.test(headline || '') ? 'designer' : '';
+export const contactRole = headline => /\b(?:co[ -]?)?founder\b(?!['’]?s?\s+office\b)/i.test(headline || '') ? 'founder' : /recruit|talent|human resources|\bhr\b/i.test(headline || '') ? 'talent' : /design|user experience/i.test(headline || '') ? 'designer' : '';
 export const eligibleDesignJob = job => /(?:product|ux|ui|user experience|interaction).*design|design.*(?:product|ux|ui)/i.test(job.title || '') && !/\bintern(?:ship)?\b|\bcontract\b|part[ -]time|freelance|temporary/i.test(`${job.title} ${job.source || ''}`);
 export function explicitlyFormerEmployee(person) {
   const company = String(person.company || '').toLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();

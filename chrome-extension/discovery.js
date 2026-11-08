@@ -20,7 +20,7 @@ function googleResults() {
 async function collectStage(context) {
     if (context.phase === 'startups') {
       const companies = googleResults().flatMap(result => {
-        if (!/^https:\/\/(?:[a-z]+\.)?linkedin\.com\/company\//.test(result.url) || !/startup|start-up/i.test(result.text)) return [];
+        if (!/^https:\/\/(?:[a-z]+\.)?linkedin\.com\/company\//.test(result.url)) return [];
         const title = result.title.split('LinkedIn')[0];
         const company = clean(title.slice(0, Math.min(...['|','–',' - ',':'].map(separator => { const index = title.indexOf(separator); return index < 0 ? title.length : index; }))));
         const source = new URL(result.url); source.hostname = 'www.linkedin.com'; source.search = ''; source.hash = '';
@@ -36,7 +36,7 @@ async function collectStage(context) {
       await chrome.runtime.sendMessage({ type: 'google-founders-page', payload: { stageId: context.stageId, people } });
     } else {
       const main = document.querySelector('main');
-      const name = clean(main?.querySelector('h1')?.innerText);
+      const name = clean((main?.querySelector('h1') || main?.querySelector('h2'))?.innerText);
       const lines = (main?.innerText || '').slice(0, 2500).split('\n').map(clean).filter(Boolean);
       const topHeadline = clean(main?.querySelector('.text-body-medium.break-words')?.innerText);
       const headline = (topHeadline ? [topHeadline] : lines.slice(0, 18)).find(line => /\b(?:co[ -]?)?founder\b/i.test(line) && matchesCompany(line, context.company) && line.length < 600) || '';
@@ -51,7 +51,7 @@ async function run() {
   if (!context?.stageId || context.stageId === completed || !['startups', 'google-founders', 'founder-profile'].includes(context.phase)) { running = false; return; }
   try {
     for (let i = 0; i < 40; i++) {
-      if (document.querySelector(context.phase === 'founder-profile' ? 'main h1' : 'h3')) break;
+      if (document.querySelector(context.phase === 'founder-profile' ? 'main h1, main h2' : 'h3')) break;
       if (/unusual traffic|verify you are human/i.test(document.body?.innerText || '')) throw Error('Google asks for verification. Complete it yourself in the scan tab, then retry.');
       await sleep(250);
     }

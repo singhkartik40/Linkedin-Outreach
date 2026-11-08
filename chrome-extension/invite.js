@@ -5,7 +5,7 @@ const sleep = milliseconds => new Promise(resolve => setTimeout(resolve, millise
 const clean = value => String(value || '').replace(/\s+/g, ' ').trim();
 const visible = element => !!element && element.getClientRects().length > 0 && getComputedStyle(element).visibility !== 'hidden';
 const vanity = new URL(location.href).searchParams.get('vanityName')?.toLowerCase() || '';
-const profileVanity = url => { try { return new URL(url).pathname.match(/^\/in\/([^/]+)/)?.[1].toLowerCase() || ''; } catch { return ''; } };
+const profileVanity = url => { try { return decodeURIComponent(new URL(url).pathname.match(/^\/in\/([^/]+)/)?.[1] || '').toLowerCase(); } catch { return ''; } };
 async function waitFor(read, timeout = 12000) {
   const deadline = Date.now() + timeout;
   while (Date.now() < deadline) { const result = read(); if (result) { return result; } await sleep(200); }
@@ -36,36 +36,44 @@ function watchUserSend(editor) {
   globalThis.outreachWatchSend({editor,kind:'invitation',onStatus:banner});
 }
 let running = false;
+const watchSend = new WeakSet();
+let watchingWithoutNote = false;
+function trackSend(editor) {
+  if (editor ? watchSend.has(editor) : watchingWithoutNote) return;
+  if (editor) watchSend.add(editor);
+  else watchingWithoutNote = true;
+  watchUserSend(editor);
+}
 chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
   if (request?.type !== 'invite-probe') return;
   sendResponse({ ok: true, page: 'invite' });
-  void run();
+  void run().catch(() => {});
 });
 async function run() {
   if (running) return;
-  const { pendingOutreach } = await chrome.storage.local.get('pendingOutreach');
-  if (!pendingOutreach || pendingOutreach.expiresAt < Date.now() || profileVanity(pendingOutreach.profileUrl) !== vanity) return;
   running = true;
   try {
-    let editor = noteEditor();
-    if (!editor) {
-      const button = await waitFor(addNoteButton);
-      if (!button) { watchUserSend(null); throw new Error('LinkedIn did not show Add a note. Sending without a note will still be tracked when LinkedIn confirms it.'); }
-      button.click();
-      editor = await waitFor(noteEditor);
-    }
-    if (!editor) { watchUserSend(null); throw new Error('LinkedIn did not open the invitation note editor.'); }
-    watchUserSend(editor);
+    const { pendingOutreach } = await chrome.storage.local.get('pendingOutreach');
+    if (!pendingOutreach || pendingOutreach.expiresAt < Date.now() || profileVanity(pendingOutreach.profileUrl) !== vanity) return;
+    const context = await chrome.runtime.sendMessage({ type: 'outreach-context' });
+    if (!context?.receiptToken || context.receiptToken !== pendingOutreach.receiptToken || context.awaitingConfirmation) return;
+    const initial = await waitFor(() => noteEditor() || addNoteButton());
+    if (initial && initial === addNoteButton()) initial.click();
+    const editor = noteEditor() || (initial && await waitFor(noteEditor));
+    if (!editor) { trackSend(null); throw new Error('LinkedIn did not open the invitation note editor. The full note is available in Outreach Desk.'); }
+    trackSend(editor);
     const note = pendingOutreach.message;
     const maximum = Number(editor.getAttribute('maxlength')) || 300;
     if (note.length > maximum) throw new Error(`The note exceeds LinkedIn's ${maximum}-character limit.`);
     fillEditor(editor, note);
-    if (editorValue(editor) !== note) throw new Error('LinkedIn did not retain the note.');
-    await chrome.storage.local.remove('pendingOutreach');
+    await sleep(200);
+    if (!visible(editor) || editorValue(editor) !== note) throw new Error('LinkedIn did not retain the note. Paste the full note from Outreach Desk.');
+    const latest = await chrome.storage.local.get('pendingOutreach');
+    if (latest.pendingOutreach?.receiptToken === pendingOutreach.receiptToken) await chrome.storage.local.remove('pendingOutreach');
     banner('Full outreach message filled. Review it and click LinkedIn Send yourself. The full message remains in Outreach Desk.');
   } catch (error) { banner(error.message || 'Could not prepare the invitation note.', true); }
   finally { running = false; }
 }
-run();
+void run().catch(() => {});
 
 })();

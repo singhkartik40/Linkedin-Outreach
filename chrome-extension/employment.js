@@ -10,7 +10,7 @@
     for (const candidate of candidates) {
       if (/\b(?:ex|former|formerly|previous|previously|past|worked|was|alumni|not|incoming|aspiring|seeking)\b|\bno longer\b/i.test(candidate)) continue;
       if (!/design|user experience|recruit|talent|human resources|\bhr\b|founder/i.test(candidate)) continue;
-      const relationship = candidate.match(/(?:\bat\s+|@\s*)(.+)$/i);
+      const relationship = candidate.match(/(?:\bat\s+|@\s*|,\s*)(.+)$/i);
       if (!relationship) continue;
       // Exact company phrase, never a substring such as Meta in Metaverse.
       const employer = normalize(relationship[1]);

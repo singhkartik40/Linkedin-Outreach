@@ -7,16 +7,29 @@ import { OutreachBoard, CityPicker } from './OutreachBoard';
 type Fact = { value: string | number | boolean | null; evidence: string };
 export type Job = { peopleSearch?: { eligible: boolean; reason: string; ageMinutes: number | null }; id: string; url: string; text: string; createdAt: string; extraction: string; sourceRecency?: string; sourceName?: string; publishedAt?: string; employmentType?: string; facts: Record<string, Fact>; assessment: { status: string; failures: { rule: string; reason: string }[]; unresolved: { rule: string; reason: string }[] } };
 export type Contact = { companyLimit?: { blocked: boolean; count: number; reason: string }; employmentVerified?: boolean; currentEmploymentEvidence?: string; contactRole?: string; funding?: { title: string; url: string; reportedAt: string } | null; deletedAt?: string | null; updatedAt?: string; confirmedAt?: string; jobLocation?: string; jobRecency?: string; messageVersions?: { id: string; message: string; replacedAt: string; deletedAt?: string | null }[]; id: string; jobId: string; jobUrl: string; jobTitle: string; company: string; name: string; headline: string; location: string; profileUrl: string; degree: string; connectionState?: string; connectionCheckedAt?: string; relevance: string; evidence: string; message: string; status: string; researchedAt: string; sheetStatus?: string; sheetSyncStatus?: string | null; sheetCheckedAt?: string | null; outreachBlocked?: boolean };
-type State = { jobBoardSources?: Record<string, { status: string; syncedAt?: string; count?: number; delay: string }>; discoverySchedule?: { enabled: boolean; nextRunAt: number; lastRunAt: number | null; lastStatus: string; lastAdded: number; leaseUntil: number }; provider: null | { provider: string; model: string; baseUrl: string; hasKey: boolean }; google: { connected: boolean; configured: boolean; readOnly: boolean; writeConfigured: boolean }; spreadsheetId: string; tracker: null | { title: string; rowCount: number; syncedAt: string; tabs: string[]; headers: string[]; missingTabs: string[]; missingHeaders: string[]; schemaValid: boolean }; jobs: Job[]; contacts: Contact[]; events: { id: string; kind: string; message: string; created_at: string }[]; sending: { available: boolean; reason: string }; automation: { autoSync: boolean; desiredSending: string } };
+type State = { jobBoardSources?: Record<string, { status: string; syncedAt?: string; count?: number; delay: string }>; discoverySchedule?: { enabled: boolean; nextRunAt: number; lastRunAt: number | null; lastStatus: string; lastAdded: number; leaseUntil: number; runId?: string | null }; provider: null | { provider: string; model: string; baseUrl: string; hasKey: boolean }; google: { connected: boolean; configured: boolean; readOnly: boolean; writeConfigured: boolean }; spreadsheetId: string; tracker: null | { title: string; rowCount: number; syncedAt: string; tabs: string[]; headers: string[]; missingTabs: string[]; missingHeaders: string[]; schemaValid: boolean }; jobs: Job[]; contacts: Contact[]; events: { id: string; kind: string; message: string; created_at: string }[]; sending: { available: boolean; reason: string }; automation: { autoSync: boolean; desiredSending: string } };
 type Page = 'Overview' | 'Outreach' | 'Job research' | 'Tracker' | 'Automation' | 'Settings';
 const providerNames: Record<string, string> = { openai: 'OpenAI', anthropic: 'Anthropic', gemini: 'Gemini', groq: 'Groq', openrouter: 'OpenRouter', nvidia: 'NVIDIA NIM', chutes: 'Chutes AI', compatible: 'OpenAI-compatible' };
-const helperVersion = '0.6.5';
+const helperVersion = '0.6.12';
 const labels: Record<string, string> = { title: 'Job title', company: 'Company', location: 'Location', postedAt: 'Exact posted time', experienceMin: 'Minimum experience (years)', experienceFlexible: 'Experience is flexible', salaryLpa: 'Minimum salary (₹ LPA)', saturdayWork: 'Saturday work', roleCategory: 'Role category', applicationOpen: 'Applications open' };
 async function api(path: string, data?: unknown) {
   const response = await fetch(`/api${path}`, data === undefined ? {} : { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(data) });
   const result = await response.json();
   if (!response.ok) throw new Error(result.error || 'Request failed.');
   return result;
+}
+function requestHelper(type: string, payload: unknown) {
+  const requestId = crypto.randomUUID();
+  const response = new Promise<{ ok: boolean; error?: string; version?: string }>(resolve => {
+    const timer = window.setTimeout(() => { window.removeEventListener('message', listener); resolve({ ok: false, error: 'Chrome helper did not respond. Reload the helper and refresh Outreach Desk.' }); }, 1800);
+    function listener(event: MessageEvent) {
+      if (event.source !== window || event.origin !== window.location.origin || event.data?.source !== 'outreach-desk-helper' || event.data?.requestId !== requestId) return;
+      window.clearTimeout(timer); window.removeEventListener('message', listener); resolve({ ok: !!event.data.ok, error: event.data.error, version: event.data.version });
+    }
+    window.addEventListener('message', listener);
+  });
+  window.postMessage({ source: 'outreach-desk', type, requestId, payload }, window.location.origin);
+  return response;
 }
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, ReactNode> = {
@@ -35,6 +48,7 @@ function Icon({ name, size = 20 }: { name: string; size?: number }) {
 }
 function Badge({ children, tone = '' }: { children: ReactNode; tone?: string }) { return <span className={`badge ${tone}`}>{children}</span>; }
 function App() {
+  const [loadedHelper, setLoadedHelper] = useState('');
   const [state, setState] = useState<State | null>(null), [page, setPage] = useState<Page>('Overview');
   const [notice, setNotice] = useState<{ text: string; error: boolean } | null>(null), [busy, setBusy] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(null), [selectedContactId, setSelectedContactId] = useState<string | null>(null);
@@ -52,6 +66,8 @@ function App() {
   function changeCities(value: string[]) { setCities(value); try { localStorage.setItem('outreach-cities', JSON.stringify(value)); } catch {} }
   const discoveryRunId = useRef<string | null>(null), autoRetryAfter = useRef(0);
   const [peopleScanning, setPeopleScanning] = useState(false), scanTimer = useRef<number | null>(null), scanActive = useRef(false);
+  const [scanStopping, setScanStopping] = useState(false);
+  const scanAttempt = useRef(0), helperScanId = useRef<string | null>(null);
   useEffect(() => { if (!peopleScanning && queuedAudience) { const mode = queuedAudience; setQueuedAudience(null); void scanPeople(false, false, undefined, false, mode); } }, [peopleScanning, queuedAudience]);
   function findAudience(replace = false) { if (peopleScanning) { setQueuedAudience(discoveryMode); return; } void scanPeople(replace); }
   const [scanProgress, setScanProgress] = useState<{ percent: number; detail: string; jobsFound: number; peopleFound: number } | null>(null);
@@ -68,12 +84,20 @@ function App() {
     return () => window.clearTimeout(timer);
   }, [state?.discoverySchedule?.enabled, state?.discoverySchedule?.nextRunAt, peopleScanning]);
 
-  useEffect(() => { const sync = () => window.postMessage({source:'outreach-desk',type:'sync-deliveries'},window.location.origin); const timer = window.setInterval(sync,10000); sync(); return () => window.clearInterval(timer); }, []);
+  useEffect(() => { const sync = () => { window.postMessage({source:'outreach-desk',type:'sync-deliveries'},window.location.origin); window.postMessage({source:'outreach-desk',type:'ping-helper',requestId:'helper-status'},window.location.origin); }; const timer = window.setInterval(sync,10000); sync(); return () => window.clearInterval(timer); }, []);
   useEffect(() => { refresh().catch(e => setNotice({ text: e.message, error: true })); const timer = setInterval(() => refresh().catch(() => {}), 30000); return () => clearInterval(timer); }, []);
   useEffect(() => { try { const saved = JSON.parse(sessionStorage.getItem('outreach-send-receipts') || '[]'); if (Array.isArray(saved)) outreachReceipts.current = new Map(saved.filter(row => Array.isArray(row) && /^[\w-]{20,}$/.test(row[0]) && /^[\w-]{20,}$/.test(row[1]))); } catch {} }, []);
   useEffect(() => {
     async function receive(event: MessageEvent) {
       if (event.source !== window || event.origin !== window.location.origin || event.data?.source !== 'outreach-desk-helper') return;
+      if (typeof event.data.version === 'string' && /^\d+\.\d+\.\d+$/.test(event.data.version)) setLoadedHelper(event.data.version);
+      if (event.data.type === 'outreach-unconfirmed') {
+        const { contactId, receiptToken } = event.data;
+        if (outreachReceipts.current.get(contactId) === receiptToken && receiptToken && !confirmingDeliveries.current.has(contactId)) {
+          setNotice({ text: 'LinkedIn delivery is unverified. Check Sent invitations before retrying. Use Mark done only after you verify delivery.', error: true });
+        }
+        return;
+      }
       if (event.data?.type === 'outreach-delivered') {
         const contactId = String(event.data.contactId || '');
         const receiptToken = outreachReceipts.current.get(contactId) || String(event.data.receiptToken || '');
@@ -89,6 +113,7 @@ function App() {
         } catch (error) { setNotice({ text: `LinkedIn reported a send, but automatic completion failed: ${(error as Error).message}. The helper will retry while this dashboard is open.`, error: true }); } finally { confirmingDeliveries.current.delete(contactId); }
         return;
       }
+      if (event.data.payload?.scanId && helperScanId.current && event.data.payload.scanId !== helperScanId.current) return;
       if (event.data?.type === 'people-scan-progress') { if (scanActive.current) { setScanProgress(event.data.payload); armScanTimeout(); } return; }
       if (event.data?.type === 'people-scan-batch') {
         if (!scanActive.current || !event.data.payload?.people?.length) return;
@@ -150,12 +175,15 @@ function App() {
   useEffect(() => { if (page === 'Job research') void refreshBoard(); }, [page]);
   async function prepareOutreach(contact: Contact) {
     if (contact.outreachBlocked) { setNotice({ text: contact.sheetStatus === 'Tracker not connected' ? 'Refresh the public tracker before outreach.' : 'This person already appears in the tracker.', error: true }); return; }
-    setHandoff(contact);
     // Clipboard writes begin in the click gesture; the Chrome helper opens the profile tab.
     const copied = navigator.clipboard?.writeText(contact.message).then(() => true, () => false) ?? Promise.resolve(false);
-    let receiptToken: string;
-    try { ({ receiptToken } = await api(`/contacts/${contact.id}/prepare`, {})); }
+    let receiptToken: string, preparedMessage: string;
+    try { ({ receiptToken, message: preparedMessage } = await api(`/contacts/${contact.id}/prepare`, {})); }
     catch (error) { setNotice({ text: (error as Error).message, error: true }); return; }
+    // Use the exact server-validated message bound to this delivery receipt.
+    setHandoff({ ...contact, message: preparedMessage });
+    let preparedCopy = copied;
+    if (preparedMessage !== contact.message) preparedCopy = navigator.clipboard?.writeText(preparedMessage).then(() => true, () => false) ?? Promise.resolve(false);
     outreachReceipts.current.set(contact.id, receiptToken);
     saveReceipts();
     const requestId = crypto.randomUUID();
@@ -167,8 +195,8 @@ function App() {
       }
       window.addEventListener('message', listener);
     });
-    window.postMessage({ source: 'outreach-desk', type: 'prepare-outreach', requestId, payload: { contactId: contact.id, receiptToken, profileUrl: contact.profileUrl, message: contact.message, contactName: contact.name } }, window.location.origin);
-    const [result, didCopy] = await Promise.all([helper, copied]);
+    window.postMessage({ source: 'outreach-desk', type: 'prepare-outreach', requestId, payload: { contactId: contact.id, receiptToken, profileUrl: contact.profileUrl, message: preparedMessage, contactName: contact.name } }, window.location.origin);
+    const [result, didCopy] = await Promise.all([helper, preparedCopy]);
     if (!result.ok) { outreachReceipts.current.delete(contact.id); saveReceipts(); }
     setNotice({ text: `${result.ok ? 'LinkedIn profile opened by the Chrome helper.' : 'Chrome helper could not open LinkedIn; use Open profile below.'} ${didCopy ? 'Full outreach message copied.' : 'Use Copy full message below.'} ${result.ok ? 'The helper is preparing the connection dialog. A confirmed LinkedIn send will mark this contact done automatically.' : result.error || ''}`, error: !didCopy || !result.ok });
   }
@@ -176,6 +204,11 @@ function App() {
     setBusy('done'); setNotice(null);
     try {
       const result = await api(`/contacts/${contact.id}/done`, {});
+      const receiptToken = outreachReceipts.current.get(contact.id);
+      if (receiptToken) {
+        const acknowledgement = await requestHelper('ack-delivery', { contactId: contact.id, receiptToken, manual: true });
+        if (acknowledgement.ok) { outreachReceipts.current.delete(contact.id); saveReceipts(); }
+      }
       await refresh();
       setNotice(result.sheetUpdated ? { text: `${contact.name} moved to Completed and Master row ${result.rowNumber} was updated and verified.`, error: false } : { text: `${contact.name} moved to Completed. Sheet update pending: ${result.error}`, error: true });
       if (handoff?.id === contact.id) setHandoff(null);
@@ -193,37 +226,50 @@ function App() {
   }
   async function scanPeople(replace: boolean, automatic = false, target?: Job, freshJobs = false, audience?: 'team' | 'founders') {
     if (!state || scanActive.current || peopleScanning) return;
-    function requestHelper(type: string, payload: unknown) {
-      const requestId = crypto.randomUUID();
-      const response = new Promise<{ ok: boolean; error?: string; version?: string }>(resolve => {
-        const timer = window.setTimeout(() => { window.removeEventListener('message', listener); resolve({ ok: false, error: 'Chrome helper did not respond.' }); }, 1800);
-        function listener(event: MessageEvent) {
-          if (event.source !== window || event.origin !== window.location.origin || event.data?.source !== 'outreach-desk-helper' || event.data?.requestId !== requestId) return;
-          window.clearTimeout(timer); window.removeEventListener('message', listener); resolve({ ok: !!event.data.ok, error: event.data.error, version: event.data.version });
-        }
-        window.addEventListener('message', listener);
-      });
-      window.postMessage({ source: 'outreach-desk', type, requestId, payload }, window.location.origin);
-      return response;
-    }
+    const attempt = ++scanAttempt.current;
+    const scanId = crypto.randomUUID(); helperScanId.current = scanId;
     setRunningAudience(automatic ? 'all' : freshJobs || target ? 'team' : audience || discoveryMode); setPeopleScanning(true); setScanProgress({ percent: 2, detail: 'Checking Chrome helper', jobsFound: 0, peopleFound: 0 }); setNotice(null);
     const ping = await requestHelper('ping-helper', {});
+    if (attempt !== scanAttempt.current) return;
     if (!ping.ok || ping.version !== helperVersion) { if (automatic) autoRetryAfter.current = Date.now() + 60000; await finishDiscovery('Helper needs reloading'); await refresh(); setPeopleScanning(false); setScanProgress(null); setNotice({ text: 'The Chrome helper needs to be reloaded. Open chrome://extensions, reload Outreach Desk LinkedIn Helper, then refresh this page.', error: true }); return; }
     let claim;
     try { claim = await api('/discovery-schedule', {action:'claim', automatic}); } catch (error) { autoRetryAfter.current = Date.now() + 60000; setPeopleScanning(false); setScanProgress(null); setNotice({text:(error as Error).message,error:true}); return; }
+    if (attempt !== scanAttempt.current) { if (claim?.claimed) await api('/discovery-schedule', { action: 'finish', runId: claim.runId, status: 'Stopped by user', added: 0 }); return; }
     if (!claim?.claimed) { autoRetryAfter.current = Date.now() + 60000; setPeopleScanning(false); setScanProgress(null); if (!automatic) setNotice({text:'A scan is already running in another dashboard tab. Please wait for it to finish.',error:true}); return; }
     discoveryRunId.current = claim.runId;
     scanImports.current = Promise.resolve(); scanAdded.current = 0; scanReplaced.current = false; scanImportError.current = '';
     scanFounderAdded.current = 0; scanWarnings.current = new Set();
     let targetJob;
     if (target) { try { targetJob = (await api(`/jobs/${target.id}/people-search`, {})).job; } catch (error) { await finishDiscovery((error as Error).message); setPeopleScanning(false); setScanProgress(null); setNotice({ text: (error as Error).message, error: true }); return; } }
+    if (attempt !== scanAttempt.current) return;
     scanActive.current = true; setScanProgress({ percent: 3, detail: 'Opening recent LinkedIn jobs', jobsFound: 0, peopleFound: 0 });
     const metroCities = ['Bengaluru', 'Mumbai', 'Delhi', 'Hyderabad', 'Pune', 'Chennai', 'Kolkata', 'Gurugram', 'Noida'];
     const scanCities = freshJobs ? ['India'] : cities.includes('India') ? ['India', ...metroCities] : cities;
-    const result = await requestHelper('scan-people', { limit: target ? 4 : 20, job: targetJob, mode: automatic ? 'all' : target || freshJobs ? 'team' : audience || discoveryMode, cities: scanCities, replace, excludedProfiles: state.contacts.filter(contact => contact.employmentVerified !== false || contact.status !== 'Draft ready' || contact.deletedAt).map(contact => contact.profileUrl) });
+    const result = await requestHelper('scan-people', { scanId, limit: target ? 4 : 20, job: targetJob, mode: automatic ? 'all' : target || freshJobs ? 'team' : audience || discoveryMode, cities: scanCities, replace, excludedProfiles: state.contacts.filter(contact => contact.employmentVerified !== false || contact.status !== 'Draft ready' || contact.deletedAt).map(contact => contact.profileUrl) });
+    if (attempt !== scanAttempt.current) return;
     if (!result.ok) { await finishDiscovery(result.error || 'Could not start scan'); await refresh(); scanActive.current = false; setPeopleScanning(false); setScanProgress(null); setNotice({ text: result.error || 'Chrome helper could not start the people scan.', error: true }); return; }
     if (target || freshJobs) { setPage('Outreach'); setDiscoveryMode('team'); }
     armScanTimeout();
+  }
+  async function stopScan() {
+    if (scanStopping) return;
+    setScanStopping(true); setQueuedAudience(null); setNotice(null);
+    scanAttempt.current++; scanActive.current = false;
+    if (scanTimer.current) window.clearTimeout(scanTimer.current);
+    try {
+      const result = await requestHelper('stop-scan', { scanId: helperScanId.current });
+      if (!result.ok) throw new Error(result.error || 'The Chrome helper could not stop this scan.');
+      await scanImports.current;
+      discoveryRunId.current ||= state?.discoverySchedule?.runId || null;
+      await finishDiscovery('Stopped by user', scanAdded.current);
+      helperScanId.current = null; autoRetryAfter.current = Date.now() + 3600000;
+      setPeopleScanning(false); setScanProgress(null); setRunningAudience('');
+      await refresh();
+      setNotice({ text: 'Scan stopped. Queued searches cancelled; contacts already saved are kept. The next automatic scan remains scheduled.', error: false });
+    } catch (error) {
+      scanActive.current = true; armScanTimeout();
+      setNotice({ text: `Could not confirm that the scan stopped: ${(error as Error).message}`, error: true });
+    } finally { setScanStopping(false); }
   }
   function armScanTimeout() {
     if (!scanActive.current) return;
@@ -236,11 +282,12 @@ function App() {
       <div className="workspace"><span className="avatar">KS</span><div>Kartik’s workspace<small>Personal · Local</small></div><span className="workspace-dot"/></div>
       
       <nav aria-label="Main navigation">{(['Overview', 'Outreach', 'Job research', 'Tracker', 'Automation', 'Settings'] as Page[]).map(item => <button key={item} className={page === item ? 'nav-item active' : 'nav-item'} onClick={() => go(item)} aria-current={page === item ? 'page' : undefined}><Icon name={item}/>{item}{item === 'Outreach' && !!state?.contacts.length && <span className="nav-count">{state.contacts.length}</span>}{item === 'Job research' && !!state?.jobs.length && <span className="nav-count">{state.jobs.length}</span>}</button>)}</nav>
-      <div className="sidebar-bottom"><span className="local-dot"/> Running on your computer<p>Private workspace</p><span className="version">LOCAL BUILD · v0.6.5</span></div>
+      <div className="sidebar-bottom"><span className="local-dot"/> Running on your computer<p>Private workspace</p><span className="version">LOCAL BUILD · v0.6.12</span><div className="field-help" role="status">{loadedHelper ? `Chrome helper v${loadedHelper}${loadedHelper === helperVersion ? ' · Connected' : ' · Reload required for latest features'}` : 'Chrome helper not detected in this browser'}</div></div>
     </aside>
     <div className="main-shell"><header className="topbar"><span>Workspace <span className="slash">/</span> <strong>{page}</strong></span><div><span className="timezone">India · IST</span><span className="mini-avatar">KS</span></div></header>
     <main>
       {notice && <div className={`notice ${notice.error ? 'error' : 'success'}`} role={notice.error ? 'alert' : 'status'}>{notice.text}<button aria-label="Dismiss notification" onClick={() => setNotice(null)}>×</button></div>}
+      {(peopleScanning || (state?.discoverySchedule?.runId && state.discoverySchedule.lastStatus === 'Running')) && <div className="scan-stop-controls"><button className="button secondary" disabled={scanStopping} onClick={() => void stopScan()}>{scanStopping ? 'Stopping scan…' : 'Stop scan'}</button><small>Stop discovery and queued searches. Saved contacts are kept.</small></div>}
       {handoff && <section className="handoff-panel" aria-label="Outreach handoff"><div><strong>Outreach for {handoff.name}</strong><p>Keep the full message ready while you review the LinkedIn connection dialog.</p></div><p><strong>Connection note ({handoff.message.length}/290):</strong> {handoff.message}</p><textarea readOnly aria-label="Full outreach message to copy" value={handoff.message} onFocus={event => event.currentTarget.select()}/><div className="handoff-actions"><button className="button secondary" onClick={async () => { try { await navigator.clipboard.writeText(handoff.message); setNotice({ text: 'Outreach message copied.', error: false }); } catch { setNotice({ text: 'Clipboard access was blocked. Select the message above and press Ctrl+C.', error: true }); } }}>Copy full message</button><a className="button primary" href={handoff.profileUrl} target="_blank" rel="noreferrer">Open profile ↗</a><button className="text-button" onClick={() => setHandoff(null)}>Close</button></div><p className="field-help">After LinkedIn confirms the send, the contact moves to Completed automatically. If LinkedIn does not expose a confirmation, use Mark done after checking the send yourself.</p></section>}
       {!state ? <section className="loading"><h1>Opening your workspace…</h1><p>Connecting to the local server.</p><button className="button secondary" onClick={() => run('retry', refresh)}>Retry connection</button></section> : <>
       {page === 'Overview' && <>
@@ -252,7 +299,7 @@ function App() {
       </>}
       {page === 'Outreach' && <>
         <PageHeading eyebrow="OUTREACH QUEUE" title="Outreach" description="Find designers and HR from recent jobs, plus startup founders discovered through Google and checked on LinkedIn." action={<div className="heading-actions"><Badge tone="blue">{activeContacts.filter(contact => isFounder(contact) === (discoveryMode === 'founders')).length} drafts ready</Badge><button className="button primary" disabled={peopleScanning && (runningAudience === discoveryMode || runningAudience === 'all' || queuedAudience === discoveryMode)} onClick={() => findAudience()}><Icon name="plus" size={16}/>{peopleScanning ? (queuedAudience === discoveryMode ? 'Search queued' : runningAudience === discoveryMode || runningAudience === 'all' ? 'Scanning LinkedIn…' : 'Queue this search') : (discoveryMode === 'founders' ? 'Find startup founders' : 'Find 20 new people')}</button><button className="button secondary" disabled={peopleScanning} onClick={() => findAudience(true)}>Find more people</button><button className="button secondary" disabled={!!busy} onClick={() => run('sync', async () => { await api('/tracker/sync', {}); }, 'Tracker refreshed. Completed contacts were checked against your Sheet updates.')}>Refresh tracker</button></div>}/>
-        {peopleScanning && scanProgress && <section className="scan-progress" role="status" aria-live="polite"><div><strong>{scanProgress.detail}</strong><span>{scanProgress.percent}%</span></div><progress max="100" value={scanProgress.percent}/><small>{scanProgress.jobsFound} job cards checked · {scanProgress.peopleFound} candidates found · {runningAudience === 'founders' ? 'target up to 20 founders' : runningAudience === 'team' ? 'target up to 20 designers/HR' : 'target up to 20 designers/HR plus 20 founders'}</small></section>}
+        {peopleScanning && scanProgress && <section className="scan-progress" role="status" aria-live="polite"><div><strong>{scanProgress.detail}</strong><span>{scanProgress.percent}%</span></div><progress max="100" value={scanProgress.percent}/><small>{scanProgress.jobsFound} verified jobs · {scanProgress.peopleFound} candidates found · {runningAudience === 'founders' ? 'target up to 20 founders' : runningAudience === 'team' ? 'target up to 20 designers/HR' : 'target up to 20 designers/HR plus 20 founders'}</small></section>}
         <section className="discovery-console" aria-label="Discovery schedule">
           <div><h2>{state.discoverySchedule?.enabled ? 'Auto-scan every hour' : 'Discovery is paused.'}</h2><small>Runs while this dashboard is open in Chrome.</small></div>
           <dl><div><dt>Next scan</dt><dd>{state.discoverySchedule?.enabled ? new Date(state.discoverySchedule.nextRunAt).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : 'Paused'}</dd></div><div><dt>Last result</dt><dd>{state.discoverySchedule?.lastStatus || 'Not run yet'}</dd></div><div><dt>New people last run</dt><dd>{state.discoverySchedule?.lastAdded || 0}</dd></div></dl>
@@ -264,7 +311,7 @@ function App() {
           <p>{discoveryMode === 'founders' ? 'Google → startups → LinkedIn founders. Current roles checked; no job opening required.' : '2 designers + 2 HR contacts per company. Founder discovery runs separately on Google.'}</p>
         </section>
         {discoveryMode === 'team' && <CityPicker cities={cities} change={changeCities} disabled={peopleScanning}/>}
-        <OutreachBoard key={discoveryMode} contacts={state.contacts.filter(contact => isFounder(contact) === (discoveryMode === 'founders'))} jobs={state.jobs} initialId={selectedContactId} send={prepareOutreach} done={markDone} retry={retrySheet} save={async (contact, input) => { await api(`/contacts/${contact.id}`, input); await refresh(); }} action={async (contact, input) => { await api(`/contacts/${contact.id}/actions`, input); await refresh(); }}/>
+        <OutreachBoard scanning={peopleScanning} scanDetail={scanProgress?.detail} key={discoveryMode} contacts={state.contacts.filter(contact => isFounder(contact) === (discoveryMode === 'founders'))} jobs={state.jobs} initialId={selectedContactId} send={prepareOutreach} done={markDone} retry={retrySheet} save={async (contact, input) => { await api(`/contacts/${contact.id}`, input); await refresh(); }} action={async (contact, input) => { await api(`/contacts/${contact.id}/actions`, input); await refresh(); }}/>
       </>}
       {page === 'Job research' && <>
         <PageHeading eyebrow="JOB BOARD" title={selected ? 'Look beyond the listing.' : 'Your next role. One workspace.'} description="India only. Jobicy refreshes hourly; Remotive every 6 hours while the service runs. LinkedIn scans run hourly with this dashboard open in signed-in Chrome; coverage is limited to visible search results, not every LinkedIn job." action={<div className="heading-actions"><button className="button primary" disabled={!!busy} onClick={refreshBoard}>{busy === 'board' ? 'Refreshing…' : 'Refresh job feeds'}</button><button className="button secondary" disabled={peopleScanning} onClick={() => scanPeople(false, false, undefined, true)}>Scan recent LinkedIn jobs</button><a className="button secondary" href="https://www.linkedin.com/jobs/search/?keywords=UX%20Designer&location=India&f_TPR=r86400&f_JT=F" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>}/>

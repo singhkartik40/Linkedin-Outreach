@@ -2,7 +2,9 @@
 
 Find people to contact about Product Designer and UX Designer jobs, write a message, and keep track of who you have contacted.
 
-The app runs on your computer. Your code is saved in this [private GitHub repository](https://github.com/singhkartik40/Linkedin-Outreach).
+For a detailed handoff to Open Code or another browser agent, read [the complete outreach operator playbook](OPEN_CODE_OUTREACH_PLAYBOOK.md). It covers Chrome setup, exact clicks, send verification, Sheet updates, recovery, and a ready-to-paste agent prompt.
+
+The app runs on your computer. The source code is published in the [Outreach Desk GitHub repository](https://github.com/singhkartik40/Linkedin-Outreach).
 
 ## What happens when I click Find 20 new people?
 
@@ -50,7 +52,7 @@ Keep the terminal running while using the app. Later, you can use **Start Outrea
 <details>
 <summary>Optional: download using Git</summary>
 
-Sign in with a GitHub account that can access the private repository, then run:
+Clone the repository with:
 
 ```powershell
 git clone https://github.com/singhkartik40/Linkedin-Outreach.git
@@ -69,7 +71,7 @@ The helper lets the app open LinkedIn, find people, and fill in a message.
 2. Turn on **Developer mode**.
 3. Click **Load unpacked**.
 4. Select the project's **chrome-extension** folder.
-5. Check that **Outreach Desk LinkedIn Helper v0.6.4** is enabled.
+5. Check that **Outreach Desk LinkedIn Helper v0.6.12** is enabled.
 6. Refresh the Outreach Desk page.
 
 **Already installed?** Click the helper's **Reload** button, then refresh Outreach Desk. You do not need to remove and install it again.
@@ -93,6 +95,8 @@ In **Job research**, each row has **Open on LinkedIn** to open the original job 
 **Refresh people** replaces unfinished drafts with a fresh search across both groups. Completed, skipped and deleted records are kept. Deleted contacts can be restored. You can also search the table, filter by company, copy details, and download a CSV file.
 
 ## Let it search every hour
+
+To cancel a running search, click **Stop scan** above the page content. It cancels the current and queued searches, closes the helper's scan tab, and keeps contacts already saved. **Pause auto-scan** separately controls future hourly runs. Cancellation requires helper **v0.6.10**: reload the extension and refresh the dashboard after updating.
 
 Automatic scans look for designers, HR/recruiters, and founders. Use **Pause auto-scan** or **Enable auto-scan** to control them.
 
@@ -274,3 +278,25 @@ Discovery imports always append unique contacts, including refresh runs; saved d
 ## LinkedIn layout fix (v0.6.5)
 
 Reload helper v0.6.5 and refresh the dashboard. The scanner reads current LinkedIn cards when the title is outside the usual paragraph sequence, verifies full-time evidence without requiring the removed legacy detail marker, and uses the same three-day window throughout scanning and imports. If a page times out, verified jobs already collected are retained. Scan notices now include the actual warning text.
+
+## Incremental discovery (v0.6.6)
+
+The helper checks Product Designer and UX Designer jobs in each location, searches people at newly verified companies, then resumes remaining job searches. Each accepted person is sent to the dashboard in an individual batch and saved immediately; existing contacts remain intact. While waiting, an empty Active table shows the current scan stage instead of a no-results message. Full-time detail checks allow up to five seconds for LinkedIn rendering.
+
+## Automatic completion after sending (v0.6.7)
+
+Click **Send outreach**, review the prepared note, then click **Send** on LinkedIn. You do not need to click **Mark done** afterwards. The helper can detect the new Pending state even when LinkedIn shows no success notification. It moves the person to Completed and starts the Sheet update. Keep the dashboard open for this sync. Mark done remains a fallback if LinkedIn exposes no detectable result.
+
+## Founder discovery update (v0.6.9)
+
+Reload the Chrome helper after updating to v0.6.9. Founder discovery searches Google for product companies, finds their LinkedIn founders, and verifies their current role and location. It supports LinkedIn’s newer profile layout. You can send verified founder pitch drafts from the Founders & co-founders list.
+
+## Close the LinkedIn tab after sending (v0.6.8)
+
+After LinkedIn confirms the send and Outreach Desk records the contact as completed, the helper automatically closes that person's outreach tab. Keep the dashboard open to receive the confirmation. A pending Sheet update remains available for retry in Completed. The dashboard, other profiles and unrelated browser tabs stay open.
+
+## Stop scan (v0.6.10)
+
+The **Stop scan** button is available while discovery runs, including after refreshing the dashboard. It cancels queued audience searches and ignores late results without losing contacts already saved. It keeps outreach invitations and delivery receipts separate. Hourly discovery stays enabled; its next run is deferred after stopping. Use **Pause auto-scan** to disable future automatic runs.
+
+Developer check: `node tests/scan-stop-ui.cjs` uses fixture data in isolated headless Chrome and never sends to real contacts.

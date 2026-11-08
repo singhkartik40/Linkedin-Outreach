@@ -62,7 +62,7 @@ const assert = require('node:assert/strict');
       window.addEventListener('message', event => {
         if (event.source !== window || event.data?.source !== 'outreach-desk' || !['ping-helper', 'scan-people'].includes(event.data?.type)) return;
         const send = (type, payload) => window.postMessage({ source: 'outreach-desk-helper', type, payload }, location.origin);
-        window.postMessage({ source: 'outreach-desk-helper', requestId: event.data.requestId, ok: true, version: '0.6.5' }, location.origin);
+        window.postMessage({ source: 'outreach-desk-helper', requestId: event.data.requestId, ok: true, version: '0.6.8' }, location.origin);
         if (event.data.type === 'ping-helper') return;
         if (!event.data.payload.job && !['team','all','founders'].includes(event.data.payload.mode)) throw new Error('A scan must specify its audience');
         setTimeout(() => send('people-scan-progress', { phase: 'jobs', percent: 30, detail: 'Checking 2 recent jobs', jobsFound: 1, peopleFound: 0 }), 60);
@@ -90,6 +90,7 @@ const assert = require('node:assert/strict');
     await scanPage.getByRole('button', { name: 'Find 20 new people' }).click();
     await scanPage.getByRole('status').filter({ hasText: 'Checking 2 recent jobs' }).waitFor();
     assert.equal(await scanPage.locator('progress').getAttribute('value'), '30');
+    await scanPage.getByRole('heading',{name:'Scan in progress — contacts will appear here as they are verified.'}).waitFor();
     await scanPage.getByRole('button', { name: 'Test Person 1', exact: true }).waitFor();
     assert.equal(await scanPage.getByRole('button', { name: 'Scanning LinkedIn…', exact: true }).isEnabled(), false, 'contacts appear before scan completion');
     await scanPage.getByRole('button', {name:'Founders & co-founders',exact:true}).click();

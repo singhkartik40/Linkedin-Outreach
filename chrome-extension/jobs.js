@@ -141,7 +141,7 @@ async function verifyEmployment(jobs, context, partial) {
       const card = document.querySelector(`[role="button"][componentkey="job-card-component-ref-${id}"], [data-occludable-job-id="${id}"]`) || [...document.querySelectorAll('a[href*="/jobs/view/"]')].find(link => new URL(link.href, location.href).pathname === `/jobs/view/${id}/`);
       if (!card) continue;
       card.click();
-      detail = await until(() => jobDetail(job), 1800);
+      detail = await until(() => jobDetail(job), 5000);
     }
     if (detail?.fullTime && (!detail.recency || fresh(detail.recency))) verified.push({ ...job, recency: detail.recency || job.recency, employmentType: 'Full-time', source: `${job.source}\nEmployment verified in job details: ${detail.employment}` });
     partial.jobs = verified;

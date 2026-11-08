@@ -17,8 +17,24 @@ const people = url => {
  const cards = Array.from({length:8}, (_, i) => `<a componentkey="auto-component-${i}" href="https://www.linkedin.com/in/browser-test-person-${companyIndex}-${founder ? 'f' : designer ? 'd' : 'h'}-${i}/">Test Person ${i}<br> • 2nd<br>${founder ? 'Co-founder' : designer ? 'UX Designer' : 'Recruiter'} at ${company}<br>${founder ? 'Indore, India' : 'Bengaluru, India'}</a>`).join('');
  return `<!doctype html><html><body>${filtered || companyIndex === 4 ? cards : `<div role="button"><div aria-label="Filter by Current companies">Current companies</div></div><div id="filter"></div><script>document.querySelector('[role=button]').onclick=()=>{document.querySelector('#filter').innerHTML='<input placeholder="Add a company"><div role="listbox"></div><a href="#">Show results</a>';document.querySelector('input').oninput=()=>{document.querySelector('[role=listbox]').innerHTML='<div role="option">${company}</div>';document.querySelector('[role=option]').onclick=()=>{};};document.querySelector('a').onclick=e=>{e.preventDefault();const u=new URL(location.href);u.searchParams.set('currentCompany','["1"]');location.href=u.href;};};</script>`}</body></html>`;
 };
-const profile = `<!doctype html><html><body><main><button>Connect</button></main><script>document.querySelector('button').onclick=()=>{document.body.dataset.connectClicked='true'}</script></body></html>`;
-const invite = `<!doctype html><html><body><button>Add a note</button><div id="editor"></div><div role="alert"></div><script>document.querySelector('button').onclick=()=>{document.querySelector('#editor').innerHTML='<textarea placeholder="Write a note"></textarea><button>Send</button>';document.querySelector('#editor button').onclick=()=>{document.querySelector('[role=alert]').textContent='Invitation sent';};}</script></body></html>`;
+const profile = `<!doctype html><html><body><main><button>Connect</button></main><script>
+const primary = document.querySelector('button');
+if (localStorage.getItem('sent:' + location.pathname.split('/')[2])) {
+  primary.textContent = '…';
+  primary.setAttribute('aria-label', 'More actions');
+  primary.onclick = () => { primary.insertAdjacentHTML('afterend', '<div role="menu"><div role="menuitem" aria-label="Pending, click to withdraw invitation">Pending</div></div>'); };
+}
+</script></body></html>`;
+const invite = `<!doctype html><html><body><div role="dialog" id="editor"></div><div role="alert"></div><script>
+setTimeout(() => {
+  const editor = document.querySelector('#editor');
+  editor.innerHTML = '<textarea maxlength="300" placeholder="Write a note"></textarea><button aria-label="Send invitation">➤</button>';
+  editor.querySelector('button').onclick = () => {
+    localStorage.setItem('sent:' + new URL(location.href).searchParams.get('vanityName'), 'true');
+    editor.innerHTML = '';
+  };
+}, 850);
+</script></body></html>`;
 
 (async () => {
   const dir = mkdtempSync(path.join(tmpdir(), 'outreach-extension-'));
@@ -94,13 +110,6 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
     assert.ok(fullMessage.length > 200 && fullMessage.length <= 290);
     assert.ok(fullMessage.includes('https://karteek.work'));
     assert.ok(fullMessage.includes('16hilLHZ3_4nvYX56vPKkKpMFjUqpk1oN/view?usp=sharing'));
-    await worker.evaluate(message => chrome.storage.local.set({ pendingOutreach: { profileUrl: 'https://www.linkedin.com/in/browser-test-person-1/', message, shortNote: 'Legacy short note must not be used', expiresAt: Date.now() + 60000 } }), fullMessage);
-    const invitation = await context.newPage();
-    await invitation.goto('https://www.linkedin.com/in/browser-test-person-1/');
-    await invitation.locator('textarea').waitFor({ timeout: 15000 });
-    assert.equal(await invitation.locator('textarea').inputValue(), fullMessage);
-    assert.equal(await invitation.getByRole('button', { name: 'Send' }).count(), 1);
-    await invitation.close();
     const db = new DatabaseSync(path.join(dir, 'data', 'outreach.sqlite'));
     const tracker = { title: 'Test tracker', rowCount: 0, syncedAt: new Date().toISOString(), schemaValid: true, tabs: ['Master'], headers: ['Person', 'Profile URL', 'Status'], missingTabs: [], missingHeaders: [], valueRanges: [{ range: 'Master!A1:C1', values: [['Person', 'Profile URL', 'Status']] }] };
     db.prepare("INSERT INTO settings(key,value) VALUES('tracker',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(JSON.stringify(tracker));
@@ -122,6 +131,7 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
     if (!userInvite) console.error('No invitation tab:', { tabs: context.pages().map(tab => tab.url()), chromeTabs: await worker.evaluate(() => chrome.tabs.query({})), storage: await worker.evaluate(() => chrome.storage.local.get(['outreachSession', 'pendingOutreach'])), dashboard: (await page.locator('body').innerText()).slice(0, 600) });
     assert.ok(userInvite);
     await userInvite.locator('textarea').waitFor({ timeout: 15000 });
+    await userInvite.waitForFunction(note => document.querySelector('textarea').value === note, fullMessage, { timeout: 5000 });
     await userInvite.locator('textarea').fill('I edited the invitation before sending it.');
     let confirmAttempts = 0;
     await page.route('**/api/contacts/*/confirm-from-helper', async route => {
@@ -129,19 +139,35 @@ const invite = `<!doctype html><html><body><button>Add a note</button><div id="e
       if (confirmAttempts === 1) { await route.fetch(); return route.abort(); }
       return route.continue();
     });
-    await userInvite.getByRole('button', { name: 'Send', exact: true }).click();
+    await userInvite.getByRole('button', { name: 'Send invitation', exact: true }).click();
     try { await page.getByRole('button', { name: 'Completed (1)' }).waitFor({ timeout: 25000 }); }
     catch (error) {
       console.error('Confirmation debug:', { tabs: context.pages().map(tab => tab.url()), inviteText: await userInvite.locator('body').innerText(), storage: await worker.evaluate(() => chrome.storage.local.get(['outreachSession', 'pendingOutreach'])), dashboard: (await page.locator('body').innerText()).slice(0, 900) });
       throw error;
     }
+    for (let attempt = 0; attempt < 40 && !userInvite.isClosed(); attempt++) await page.waitForTimeout(100);
+    assert.equal(userInvite.isClosed(), true, 'outreach tab closes after dashboard acknowledgement');
+    assert.equal(page.isClosed(), false, 'dashboard stays open');
     assert.ok(confirmAttempts >= 2, 'lost API response is retried automatically');
     await page.waitForTimeout(500);
     assert.equal((await worker.evaluate(() => chrome.storage.local.get('confirmedDeliveries'))).confirmedDeliveries.length, 0, 'confirmation is removed only after dashboard acknowledgement');
     const confirmed = await (await page.request.get('http://127.0.0.1:14320/api/state')).json();
     assert.equal(confirmed.contacts.find(p => p.id === recipient.id).status, 'Send confirmed');
     assert.equal(confirmed.contacts.find(p => p.id === recipient.id).deliveryEvidence, 'LinkedIn send confirmed by Chrome helper');
-    console.log('PASS: real Chrome extension imported 20 team contacts plus 10 Google-discovered startup founders without a job or funding report, filled a note, and marked done after an edited note, a reused confirmation toast and a lost API response.');
+    const manualRecipient = confirmed.contacts.find(person => person.id !== recipient.id && !person.outreachBlocked);
+    const manualRow = page.locator('tr').filter({ has: page.locator(`a[href="${manualRecipient.profileUrl}"]`) });
+    const [manualInvite] = await Promise.all([
+      context.waitForEvent('page', { timeout: 10000 }),
+      manualRow.getByRole('button', { name: 'Send outreach' }).click(),
+    ]);
+    await manualInvite.waitForURL('**/preload/custom-invite/**', { timeout: 15000 });
+    await manualInvite.waitForFunction(note => document.querySelector('textarea')?.value === note, manualRecipient.message, { timeout: 5000 });
+    const markDone = manualRow.getByRole('checkbox', { name: /mark done/i });
+    await markDone.click();
+    for (let attempt = 0; attempt < 40 && !manualInvite.isClosed(); attempt++) await page.waitForTimeout(100);
+    assert.equal(manualInvite.isClosed(), true, 'manually recorded delivery closes its helper tab');
+    assert.equal(page.isClosed(), false);
+    console.log('PASS: isolated Chrome imported team and founder contacts, filled a delayed invitation editor, verified Pending under More after an edited note was sent without a toast, retried a lost API response, and closed the outreach tab after automatic and manual completion.');
   } finally {
     if (context) await context.close();
     server.kill(); await new Promise(resolve => server.exitCode !== null ? resolve() : server.once('exit', resolve));

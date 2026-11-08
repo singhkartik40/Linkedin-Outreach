@@ -1,9 +1,11 @@
 import { randomUUID } from 'node:crypto';
+import { validateOutreachMessage } from './outreach-message.mjs';
 
 const lifetime = 15 * 60 * 1000;
 const intents = new Map();
 
 export function beginOutreach(contact, now = Date.now()) {
+  validateOutreachMessage(contact.message);
   for (const [token, intent] of intents) if (intent.expiresAt <= now || intent.contactId === contact.id) intents.delete(token);
   const token = randomUUID();
   intents.set(token, { contactId: contact.id, profileUrl: contact.profileUrl, message: contact.message, expiresAt: now + lifetime });

@@ -8,5 +8,5 @@ export function claimSchedule(schedule, automatic, now = Date.now()) {
 }
 export function finishSchedule(schedule, runId, status, added = 0, now = Date.now()) {
  if (!runId || schedule.runId !== runId) return schedule;
- return { ...schedule, runId: null, leaseUntil: 0, lastFinishedAt: now, lastStatus: String(status).slice(0,500), lastAdded: Math.max(0, Math.min(50, Number(added) || 0)) };
+ return { ...schedule, runId: null, leaseUntil: 0, nextRunAt: status === 'Stopped by user' ? Math.max(schedule.nextRunAt, now + INTERVAL) : schedule.nextRunAt, lastFinishedAt: now, lastStatus: String(status).slice(0,500), lastAdded: Math.max(0, Math.min(50, Number(added) || 0)) };
 }
