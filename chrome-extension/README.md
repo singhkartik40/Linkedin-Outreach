@@ -1,4 +1,4 @@
-# Chrome helper — v0.6.12
+# Chrome helper — v0.6.13
 
 This helper lets Outreach Desk open LinkedIn, find people, and fill outreach messages in your signed-in Chrome profile.
 
@@ -10,7 +10,7 @@ This helper lets Outreach Desk open LinkedIn, find people, and fill outreach mes
 4. Make sure the helper is enabled and can access LinkedIn and `http://127.0.0.1:4318/`.
 5. Refresh Outreach Desk in the same Chrome profile.
 
-Already installed? Click **Reload**, then refresh the dashboard and any open outreach profile tabs. Check that the helper shows **0.6.12**. Use the helper in Chrome.
+Already installed? Click **Reload**, then refresh the dashboard and any open outreach profile tabs. Check that the helper shows **0.6.13**. Use the helper in Chrome.
 
 ## Stop a running scan (v0.6.10)
 

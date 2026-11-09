@@ -14,8 +14,12 @@ const people = url => {
  const designer = url.searchParams.get('keywords').includes('designer');
  const companyIndex = Number(company.at(-1));
  const filtered = url.searchParams.has('currentCompany');
- const cards = Array.from({length:8}, (_, i) => `<a componentkey="auto-component-${i}" href="https://www.linkedin.com/in/browser-test-person-${companyIndex}-${founder ? 'f' : designer ? 'd' : 'h'}-${i}/">Test Person ${i}<br> • 2nd<br>${founder ? 'Co-founder' : designer ? 'UX Designer' : 'Recruiter'} at ${company}<br>${founder ? 'Indore, India' : 'Bengaluru, India'}</a>`).join('');
- return `<!doctype html><html><body>${filtered || companyIndex === 4 ? cards : `<div role="button"><div aria-label="Filter by Current companies">Current companies</div></div><div id="filter"></div><script>document.querySelector('[role=button]').onclick=()=>{document.querySelector('#filter').innerHTML='<input placeholder="Add a company"><div role="listbox"></div><a href="#">Show results</a>';document.querySelector('input').oninput=()=>{document.querySelector('[role=listbox]').innerHTML='<div role="option">${company}</div>';document.querySelector('[role=option]').onclick=()=>{};};document.querySelector('a').onclick=e=>{e.preventDefault();const u=new URL(location.href);u.searchParams.set('currentCompany','["1"]');location.href=u.href;};};</script>`}</body></html>`;
+ const cards = Array.from({length:8}, (_, i) => {
+   const key = companyIndex === 4 ? `auto-component-${i}` : `8c352e88-adba-4943-8ad4-411bff911ae${i}`;
+   const link = `<a componentkey="${key}" href="https://www.linkedin.com/in/browser-test-person-${companyIndex}-${founder ? 'f' : designer ? 'd' : 'h'}-${i}/">Test Person ${i}<br> • 2nd<br>${founder ? 'Co-founder' : designer ? 'UX Designer' : 'Recruiter'} at ${company}<br>${founder ? 'Indore, India' : 'Bengaluru, India'}</a>`;
+   return companyIndex === 4 ? link : `<div role="listitem"><div data-display-contents="true">${link}</div></div>`;
+ }).join('');
+ return `<!doctype html><html><body><main>${filtered || companyIndex === 4 ? cards : `<div role="button"><div aria-label="Filter by Current companies">Current companies</div></div><div id="filter"></div><script>document.querySelector('[role=button]').onclick=()=>{document.querySelector('#filter').innerHTML='<input placeholder="Add a company"><div role="listbox"></div><a href="#">Show results</a>';document.querySelector('input').oninput=()=>{document.querySelector('[role=listbox]').innerHTML='<div role="option">${company}</div>';document.querySelector('[role=option]').onclick=()=>{};};document.querySelector('a').onclick=e=>{e.preventDefault();const u=new URL(location.href);u.searchParams.set('currentCompany','["1"]');location.href=u.href;};};</script>`}</main></body></html>`;
 };
 const profile = `<!doctype html><html><body><main><button>Connect</button></main><script>
 const primary = document.querySelector('button');

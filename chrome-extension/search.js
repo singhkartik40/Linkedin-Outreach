@@ -19,9 +19,11 @@ const companyOptionName = item => clean(item.querySelector('p')?.innerText || it
 function visible(element) { return !!element && element.getClientRects().length > 0; }
 const degreeFrom = value => String(value || '').match(/\b([123])(?:st|nd|rd)(?:\+)?\b/i)?.[1] || 'Unknown';
 const degreeLine = value => String(value || '').length < 16 && /\b[123](?:st|nd|rd)(?:\+)?$/i.test(value);
+const modernCards = 'a[componentkey^="auto-component-"][href*="/in/"], main [role="listitem"] a[componentkey][href*="/in/"]';
+const legacyCards = 'li.reusable-search__result-container, li.artdeco-list__item, [data-view-name="search-entity-result-universal-template"]';
 function collect(company, pageFiltered) {
-  const modern = [...document.querySelectorAll('a[componentkey^="auto-component-"][href*="/in/"]')];
-  const cards = [...document.querySelectorAll('li.reusable-search__result-container, li.artdeco-list__item, [data-view-name="search-entity-result-universal-template"]'), ...modern];
+  const modern = [...document.querySelectorAll(modernCards)].filter(visible);
+  const cards = [...document.querySelectorAll(legacyCards), ...modern];
   const people = [];
   for (const card of cards) {
     const link = card.matches?.('a[href*="/in/"]') ? card : [...card.querySelectorAll('a[href*="/in/"]')].find(visible);
@@ -99,7 +101,7 @@ async function run() {
     }
   }
   for (let attempt = 0; attempt < 40; attempt += 1) {
-    if (document.querySelector('a[componentkey^="auto-component-"][href*="/in/"], li.reusable-search__result-container') || document.body.innerText.includes('No results found')) break;
+    if (document.querySelector(`${modernCards}, ${legacyCards}`) || document.body.innerText.includes('No results found')) break;
     await sleep(200);
   }
   for (let i = 0; i < 2; i += 1) { window.scrollTo(0, document.body.scrollHeight); await sleep(400); }
