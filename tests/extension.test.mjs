@@ -16,11 +16,18 @@ test('a reloaded extension reports a reconnect notice instead of throwing in an 
 });
 
 test('Chrome helper accepts the full note without a separate short note', async () => {
-  let listener, saved;
+  let listener, saved, queried = 0, reloaded = 0;
+  const updates = [];
   const chrome = {
     runtime: { onMessage: { addListener(callback) { listener = callback; } }, lastError: null },
     storage: { local: { set(value, callback) { saved = { ...saved, ...value }; callback?.(); return Promise.resolve(); } } },
-    tabs: { onUpdated: { addListener() {} }, query: async () => [], create: async () => ({ id: 42 }), update: async () => ({ id: 42 }) },
+    tabs: {
+      onUpdated: { addListener() {} },
+      query: async () => { queried += 1; return [{ id: 9, url: 'https://www.linkedin.com/in/example/' }]; },
+      create: async () => ({ id: 42 }),
+      update: async (id, options) => { updates.push({ id, options }); return { id }; },
+      reload: async () => { reloaded += 1; },
+    },
   };
   runInNewContext(readFileSync(new URL('../chrome-extension/background.js', import.meta.url), 'utf8'), { chrome, URL, URLSearchParams, Date, Math, Set, Number, String, encodeURIComponent });
   const request = { type: 'prepare-outreach', payload: { contactId: '11111111-1111-4111-8111-111111111111', receiptToken: '22222222-2222-4222-8222-222222222222', profileUrl: 'https://www.linkedin.com/in/example/', message: 'Full outreach message for later follow-up.' } };
@@ -28,6 +35,11 @@ test('Chrome helper accepts the full note without a separate short note', async 
   assert.equal(response.ok, true);
   assert.equal(saved.pendingOutreach.shortNote, undefined);
   assert.equal(saved.pendingOutreach.message, request.payload.message);
+  assert.equal(queried, 0, 'a user’s existing profile tab is never reused');
+  assert.equal(reloaded, 0, 'the helper does not reload a user-owned LinkedIn tab');
+  assert.equal(updates.length, 1);
+  assert.equal(updates[0].id, 42);
+  assert.equal(updates[0].options.url, 'https://www.linkedin.com/in/example/');
   const invalid = await new Promise(resolve => listener({ ...request, payload: { ...request.payload, message: 'x'.repeat(291) } }, { url: 'http://127.0.0.1:4318/' }, resolve));
   assert.equal(invalid.ok, false);
 });

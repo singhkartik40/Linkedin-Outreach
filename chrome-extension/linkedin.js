@@ -16,12 +16,14 @@ function exactControl(label, root = document) {
 function moreActions(root) {
   return controls(root).find(element => clean(element.textContent).toLowerCase() === 'more' || /^more (?:actions|options)\b/i.test(clean(element.getAttribute('aria-label'))));
 }
-function connectControl(root = document) {
-  return controls(root).find(element => {
+function connectControl(root = document, contactName = '') {
+  const candidates = controls(root).filter(element => {
     const text = clean(element.textContent).toLowerCase();
     const aria = clean(element.getAttribute('aria-label')).toLowerCase();
     return text === 'connect' || /^invite .+ to connect$/.test(aria);
   });
+  const expected = clean(contactName).toLowerCase();
+  return candidates.find(element => expected && clean(element.getAttribute('aria-label')).toLowerCase() === `invite ${expected} to connect`) || candidates[0];
 }
 async function waitFor(read, timeout = 12000) {
   const deadline = Date.now() + timeout;
@@ -94,12 +96,12 @@ async function prepareConnection(pending) {
   if (!main) throw new Error('LinkedIn profile controls did not load.');
   if (globalThis.outreachPendingInvitation()) throw new Error('A connection request is already pending for this profile.');
 
-  await waitFor(() => connectControl(main) || exactControl('Message', main) || moreActions(main) || globalThis.outreachPendingInvitation(main));
-  let connect = connectControl(main);
+  await waitFor(() => connectControl(main, pending.contactName) || exactControl('Message', main) || moreActions(main) || globalThis.outreachPendingInvitation(main));
+  let connect = connectControl(main, pending.contactName);
   if (!connect) {
     const more = moreActions(main);
     if (more && more.getAttribute('aria-expanded') !== 'true') more.click();
-    if (more) connect = await waitFor(() => connectControl(document) || (globalThis.outreachPendingInvitation() && 'pending'), 4000);
+    if (more) connect = await waitFor(() => connectControl(document, pending.contactName) || (globalThis.outreachPendingInvitation() && 'pending'), 4000);
     if (connect === 'pending') throw new Error('A connection request is already pending for this profile.');
   }
   if (connect) {

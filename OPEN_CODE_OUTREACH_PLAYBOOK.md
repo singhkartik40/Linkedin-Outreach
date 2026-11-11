@@ -1,8 +1,8 @@
 # Outreach Desk: complete operator and Open Code playbook
 
-Updated 9 November 2026 for Outreach Desk and Chrome helper v0.6.13.
+Updated 11 November 2026 for Outreach Desk and Chrome helper v0.6.14.
 
-This is a handoff for a person or an AI agent operating an existing Outreach Desk installation. It explains the application, the Chrome connection, the actual clicks, how to prove a send happened, how to update the tracker, and how to resume safely after a failure. Read the whole document before sending real invitations.
+This is a handoff for a person or an AI agent operating Kartik's existing Outreach Desk. It explains the application, the Chrome connection, the actual clicks, how to prove a send happened, how to update the tracker, and how to resume safely after a failure. Read the whole document before sending real invitations.
 
 ## Contents
 
@@ -66,19 +66,19 @@ The helper prepares forms; it does not itself press LinkedIn's final Send button
 
 | Item | Value |
 | --- | --- |
-| Windows project directory | `<project folder>` |
+| Windows project directory | `E:\Linkdin Outrreach tool` |
 | Built application | `http://127.0.0.1:4318/` |
 | Health check | `http://127.0.0.1:4318/api/health` |
 | Read-only app state | `http://127.0.0.1:4318/api/state` |
-| Chrome helper directory | `<project folder>\chrome-extension` |
+| Chrome helper directory | `E:\Linkdin Outrreach tool\chrome-extension` |
 | Helper name | Outreach Desk LinkedIn Helper |
-| Version in this checkout | Read `chrome-extension/manifest.json` for the current version, `0.6.13` |
+| Version in this checkout | Read `chrome-extension/manifest.json` for the current version, `0.6.14` |
 | Private local storage | `.data` in the project; preserve it |
 | Optional private environment settings | `.env` in the project; preserve it |
 | Repository | https://github.com/singhkartik40/Linkedin-Outreach |
-| Portfolio | Your portfolio link |
-| Resume | Your resume link |
-| Outreach tracker | The Google Sheet configured for your installation |
+| Portfolio | https://karteek.work |
+| Resume | https://drive.google.com/file/d/16hilLHZ3_4nvYX56vPKkKpMFjUqpk1oN/view?usp=sharing |
+| Outreach tracker | https://docs.google.com/spreadsheets/d/1M61OSpGnYkTYEbZbsaABS4j7QsxaHRV9L24PXniwIIY/edit |
 
 Keep the exact resume URL intact, including `?usp=sharing`. Do not use an old link, shorten it, cut it off, or replace it with an ellipsis. Both personal links are deliberately part of the outreach workflow. API keys, browser tokens and Sheet write tokens are not part of any message.
 
@@ -112,7 +112,7 @@ Do not confuse the Open Code model/provider key with the optional AI-provider ke
 Use PowerShell in the project directory:
 
 ```powershell
-Set-Location -LiteralPath '<project folder>'
+Set-Location -LiteralPath 'E:\Linkdin Outrreach tool'
 node --version
 npm start
 ```
@@ -152,7 +152,7 @@ This creates a Windows task for the service. Installing startup behaviour is a s
 1. In the correct Chrome profile, open `chrome://extensions`.
 2. Enable **Developer mode**.
 3. Click **Load unpacked**.
-4. Select `<project folder>\chrome-extension`.
+4. Select `E:\Linkdin Outrreach tool\chrome-extension`.
 5. Enable **Outreach Desk LinkedIn Helper**.
 6. Check its site access for the local dashboard, LinkedIn and Google Search.
 7. Refresh the dashboard in that same Chrome profile.
@@ -733,7 +733,7 @@ A nonzero security-scan exit can reflect static findings; inspect its actual rep
 Paste this as a task prompt after connecting the browser. Adjust the batch size/audience if needed.
 
 ```text
-Read OPEN_CODE_OUTREACH_PLAYBOOK.md in <project folder> first.
+Read OPEN_CODE_OUTREACH_PLAYBOOK.md in E:\Linkdin Outrreach tool first.
 
 Operate my existing Outreach Desk at http://127.0.0.1:4318/ through the
 connected, signed-in Chrome profile. Use the actual browser MCP tools

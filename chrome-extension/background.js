@@ -175,9 +175,28 @@ function scheduleInviteProbe(tabId, delay = 1200) {
     } catch {}
   }, delay));
 }
+function isFeedLanding(url) {
+  try {
+    const current = new URL(url);
+    return current.origin === 'https://www.linkedin.com' && (/^\/$/.test(current.pathname) || /^\/feed\/?$/.test(current.pathname));
+  } catch { return false; }
+}
+// LinkedIn occasionally redirects a newly opened invitation tab to the feed before
+// its profile controls hydrate. Keep the recovery scoped to the helper-owned tab,
+// perform it once, and never interfere after the user has pressed Send.
+async function recoverOutreachLanding(tabId, url) {
+  if (!isFeedLanding(url)) return;
+  const { outreachSession, pendingOutreach } = await chrome.storage.local.get(['outreachSession', 'pendingOutreach']);
+  if (!outreachSession || outreachSession.tabId !== tabId || outreachSession.awaitingConfirmation || outreachSession.expiresAt < Date.now()) return;
+  if (!pendingOutreach || pendingOutreach.receiptToken !== outreachSession.receiptToken || pendingOutreach.expiresAt < Date.now()) return;
+  if ((outreachSession.redirectRecoveries || 0) >= 1) return;
+  await chrome.storage.local.set({ outreachSession: { ...outreachSession, redirectRecoveries: (outreachSession.redirectRecoveries || 0) + 1 } });
+  await chrome.tabs.update(tabId, { url: outreachSession.profileUrl });
+}
 chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
   if (changeInfo.status !== 'complete' && !changeInfo.url) return;
   const url = changeInfo.url || tab.url || '';
+  void recoverOutreachLanding(tabId, url).catch(() => {});
   if (url.startsWith('https://www.linkedin.com/preload/custom-invite/')) scheduleInviteProbe(tabId);
   scheduleScanProbe(tabId, tab);
 });
@@ -531,24 +550,15 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
     chrome.storage.local.set({ pendingOutreach }, async () => {
       if (chrome.runtime.lastError) { sendResponse({ ok: false, error: chrome.runtime.lastError.message }); return; }
       try {
-        const tabs = await chrome.tabs.query({ url: 'https://www.linkedin.com/in/*' });
-        const existing = tabs.find(tab => {
-          try { return new URL(tab.url).pathname.replace(/\/$/, '') === profile.pathname.replace(/\/$/, ''); }
-          catch { return false; }
-        });
-        if (existing?.id) {
-          await chrome.storage.local.set({ outreachSession: { contactId, receiptToken, tabId: existing.id, profileUrl: profile.href, expiresAt: pendingOutreach.expiresAt, awaitingConfirmation: false } });
-          await chrome.tabs.update(existing.id, { active: true });
-          await chrome.tabs.reload(existing.id);
-          sendResponse({ ok: true, tabId: existing.id });
-        } else {
-          const tab = await chrome.tabs.create({ url: 'about:blank', active: true });
-          if (tab?.id) {
-            await chrome.storage.local.set({ outreachSession: { contactId, receiptToken, tabId: tab.id, profileUrl: profile.href, expiresAt: pendingOutreach.expiresAt, awaitingConfirmation: false } });
-            await chrome.tabs.update(tab.id, { url: profile.href });
-          }
-          sendResponse({ ok: !!tab, tabId: tab?.id });
+        // Always use an isolated helper tab. Reusing a profile tab can reload a
+        // user’s current LinkedIn session and leave it on the feed instead of the
+        // intended invitation flow.
+        const tab = await chrome.tabs.create({ url: 'about:blank', active: true });
+        if (tab?.id) {
+          await chrome.storage.local.set({ outreachSession: { contactId, receiptToken, tabId: tab.id, profileUrl: profile.href, expiresAt: pendingOutreach.expiresAt, awaitingConfirmation: false, redirectRecoveries: 0 } });
+          await chrome.tabs.update(tab.id, { url: profile.href });
         }
+        sendResponse({ ok: !!tab, tabId: tab?.id });
       } catch (error) { sendResponse({ ok: false, error: error.message }); }
     });
   } catch (error) { sendResponse({ ok: false, error: error.message }); }
