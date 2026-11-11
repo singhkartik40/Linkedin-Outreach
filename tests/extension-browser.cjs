@@ -134,6 +134,7 @@ setTimeout(() => {
     }
     if (!userInvite) console.error('No invitation tab:', { tabs: context.pages().map(tab => tab.url()), chromeTabs: await worker.evaluate(() => chrome.tabs.query({})), storage: await worker.evaluate(() => chrome.storage.local.get(['outreachSession', 'pendingOutreach'])), dashboard: (await page.locator('body').innerText()).slice(0, 600) });
     assert.ok(userInvite);
+    assert.equal(existingProfile.url(), recipient.profileUrl, 'preparing outreach never repurposes a profile tab the user already had open');
     await userInvite.locator('textarea').waitFor({ timeout: 15000 });
     await userInvite.waitForFunction(note => document.querySelector('textarea').value === note, fullMessage, { timeout: 5000 });
     await userInvite.locator('textarea').fill('I edited the invitation before sending it.');
