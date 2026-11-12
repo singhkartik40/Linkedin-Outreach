@@ -23,7 +23,12 @@ function connectControl(root = document, contactName = '') {
     return text === 'connect' || /^invite .+ to connect$/.test(aria);
   });
   const expected = clean(contactName).toLowerCase();
-  return candidates.find(element => expected && clean(element.getAttribute('aria-label')).toLowerCase() === `invite ${expected} to connect`) || candidates[0];
+  const named = candidates.find(element => expected && clean(element.getAttribute('aria-label')).toLowerCase() === `invite ${expected} to connect`);
+  if (named) return named;
+  // Profile pages contain suggested-people cards with their own Connect buttons.
+  // Never use one of those when preparing outreach for the current profile.
+  const profileCandidates = candidates.filter(element => !element.closest('aside, [role="complementary"], .scaffold-layout__aside, .pv-browsemap-section'));
+  return profileCandidates[0];
 }
 async function waitFor(read, timeout = 12000) {
   const deadline = Date.now() + timeout;
@@ -100,8 +105,13 @@ async function prepareConnection(pending) {
   let connect = connectControl(main, pending.contactName);
   if (!connect) {
     const more = moreActions(main);
+    const menus = () => [...document.querySelectorAll('[role="menu"], .artdeco-dropdown__content')].filter(visible);
+    const existingMenus = new Set(menus());
     if (more && more.getAttribute('aria-expanded') !== 'true') more.click();
-    if (more) connect = await waitFor(() => connectControl(document, pending.contactName) || (globalThis.outreachPendingInvitation() && 'pending'), 4000);
+    if (more) connect = await waitFor(() => {
+      const menu = menus().find(item => !existingMenus.has(item));
+      return (menu && connectControl(menu, pending.contactName)) || (globalThis.outreachPendingInvitation() && 'pending');
+    }, 4000);
     if (connect === 'pending') throw new Error('A connection request is already pending for this profile.');
   }
   if (connect) {

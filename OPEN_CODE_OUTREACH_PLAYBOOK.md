@@ -1,6 +1,6 @@
 # Outreach Desk: complete operator and Open Code playbook
 
-Updated 11 November 2026 for Outreach Desk and Chrome helper v0.6.14.
+Updated 12 November 2026 for Outreach Desk and Chrome helper v0.6.15.
 
 This is a handoff for a person or an AI agent operating Kartik's existing Outreach Desk. It explains the application, the Chrome connection, the actual clicks, how to prove a send happened, how to update the tracker, and how to resume safely after a failure. Read the whole document before sending real invitations.
 
@@ -72,7 +72,7 @@ The helper prepares forms; it does not itself press LinkedIn's final Send button
 | Read-only app state | `http://127.0.0.1:4318/api/state` |
 | Chrome helper directory | `E:\Linkdin Outrreach tool\chrome-extension` |
 | Helper name | Outreach Desk LinkedIn Helper |
-| Version in this checkout | Read `chrome-extension/manifest.json` for the current version, `0.6.14` |
+| Version in this checkout | Read `chrome-extension/manifest.json` for the current version, `0.6.15` |
 | Private local storage | `.data` in the project; preserve it |
 | Optional private environment settings | `.env` in the project; preserve it |
 | Repository | https://github.com/singhkartik40/Linkedin-Outreach |

@@ -71,7 +71,7 @@ The helper lets the app open LinkedIn, find people, and fill in a message.
 2. Turn on **Developer mode**.
 3. Click **Load unpacked**.
 4. Select the project's **chrome-extension** folder.
-5. Check that **Outreach Desk LinkedIn Helper v0.6.14** is enabled.
+5. Check that **Outreach Desk LinkedIn Helper v0.6.15** is enabled.
 6. Refresh the Outreach Desk page.
 
 **Already installed?** Click the helper's **Reload** button, then refresh Outreach Desk. You do not need to remove and install it again.
