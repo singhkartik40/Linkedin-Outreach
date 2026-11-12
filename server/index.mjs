@@ -240,6 +240,26 @@ const server = http.createServer(async (req, res) => {
       store.event('review', 'Job facts reviewed. Unsupported quotes remain unresolved.');
       return reply(res, 200, { saved: true });
     }
+    if (url.pathname === '/api/contacts/done' && req.method === 'POST') {
+      const input = await body(req);
+      const ids = [...new Set(Array.isArray(input.contactIds) ? input.contactIds.filter(id => typeof id === 'string' && /^[\da-f-]{36}$/i.test(id)) : [])].slice(0, 100);
+      if (!ids.length) throw new Error('Select at least one contact to mark done.');
+      const contacts = store.get('contacts', []), now = new Date().toISOString();
+      const selected = ids.map(id => contacts.find(contact => contact.id === id)).filter(Boolean);
+      const eligible = selected.filter(contact => !contact.deletedAt && contact.status !== 'Skipped');
+      const skipped = selected.length - eligible.length + ids.length - selected.length;
+      const eligibleIds = new Set(eligible.map(contact => contact.id));
+      store.set('contacts', contacts.map(contact => eligibleIds.has(contact.id) && !['Sent', 'Send confirmed'].includes(contact.status)
+        ? { ...contact, status: 'Send confirmed', confirmedAt: now, deliveryEvidence: 'User attested visible LinkedIn success (bulk)', updatedAt: now }
+        : contact));
+      for (const contact of eligible) if (!['Sent', 'Send confirmed'].includes(contact.status)) store.event('contact', `${contact.name}: delivery marked done by user in bulk; Sheet write started.`);
+      const outcomes = [];
+      for (const contact of eligible) {
+        const result = await syncCompletedContact(contact.id);
+        outcomes.push({ id: contact.id, sheetUpdated: !!result.sheetUpdated, error: result.error, rowNumber: result.rowNumber });
+      }
+      return reply(res, 200, { saved: true, completed: outcomes.length, sheetUpdated: outcomes.filter(outcome => outcome.sheetUpdated).length, pending: outcomes.filter(outcome => !outcome.sheetUpdated).length, skipped, outcomes });
+    }
     if (/^\/api\/contacts\/[\w-]+$/.test(url.pathname) && req.method === 'POST') {
       const id = url.pathname.split('/')[3], contacts = store.get('contacts', []), contact = contacts.find(item => item.id === id);
       if (!contact) return reply(res, 404, { error: 'Contact not found.' });

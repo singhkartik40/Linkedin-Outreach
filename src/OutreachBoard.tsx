@@ -24,11 +24,12 @@ export function CityPicker({ cities, change, disabled }: { cities: string[]; cha
 type Props = {
   scanning?: boolean; scanDetail?: string; contacts: Contact[]; jobs: Job[]; initialId: string | null;
   send: (contact: Contact) => void; done: (contact: Contact) => Promise<void>; retry: (contact: Contact) => Promise<void>;
+  doneMany: (contacts: Contact[]) => Promise<{ completed: number; sheetUpdated: number; pending: number; skipped: number }>;
   save: (contact: Contact, input: unknown) => Promise<void>;
   action: (contact: Contact, input: unknown) => Promise<void>;
 };
 
-export function OutreachBoard({ scanning, scanDetail, contacts, jobs, initialId, send, done, retry, save, action }: Props) {
+export function OutreachBoard({ scanning, scanDetail, contacts, jobs, initialId, send, done, doneMany, retry, save, action }: Props) {
   const [tab, setTab] = useState('Active'), [query, setQuery] = useState(''), [company, setCompany] = useState('All companies'), [sort, setSort] = useState('newest');
   const [expanded, setExpanded] = useState<string | null>(initialId), [selected, setSelected] = useState<string[]>([]), [pending, setPending] = useState(false);
   const [feedback, setFeedback] = useState<{ text: string; error?: boolean } | null>(null);
@@ -37,11 +38,19 @@ export function OutreachBoard({ scanning, scanDetail, contacts, jobs, initialId,
   const filtered = contacts.filter(contact => category(contact) === tab && (company === 'All companies' || contact.company === company) && `${contact.name} ${contact.company} ${contact.headline} ${contact.jobTitle} ${contact.location} ${contact.jobLocation || ''}`.toLowerCase().includes(query.toLowerCase())).sort((a, b) => sort === 'company' ? a.company.localeCompare(b.company) : sort === 'person' ? a.name.localeCompare(b.name) : Date.parse(b.researchedAt) - Date.parse(a.researchedAt));
   const visible = filtered.slice(0, limit);
   const selection = filtered.filter(contact => selected.includes(contact.id));
-  async function perform(work: () => Promise<void>, success: string) { setPending(true); setFeedback(null); try { await work(); setFeedback({ text: success }); } catch (error) { setFeedback({ text: (error as Error).message, error: true }); } finally { setPending(false); } }
+  const doneSelection = selection.filter(contact => !contact.deletedAt && contact.status === 'Draft ready');
+  async function perform(work: () => Promise<void>, success?: string) { setPending(true); setFeedback(null); try { await work(); if (success) setFeedback({ text: success }); } catch (error) { setFeedback({ text: (error as Error).message, error: true }); } finally { setPending(false); } }
   async function copy(value: string, label: string) { await perform(async () => { if (!navigator.clipboard) throw new Error('Clipboard unavailable. Open Details and select the text to copy.'); await navigator.clipboard.writeText(value); }, `${label} copied.`); }
   async function remove(rows: Contact[]) {
     setUndoIds([]);
     await perform(async () => { for (const contact of rows) { await action(contact, { action: 'delete' }); setUndoIds(previous => [...previous, contact.id]); } setSelected([]); }, `${rows.length} contact${rows.length === 1 ? '' : 's'} moved to Deleted. You can undo this.`);
+  }
+  async function markSelectedDone() {
+    await perform(async () => {
+      const result = await doneMany(doneSelection);
+      setSelected([]);
+      setFeedback({ text: `${result.completed} contact${result.completed === 1 ? '' : 's'} moved to Completed. ${result.sheetUpdated} Sheet update${result.sheetUpdated === 1 ? '' : 's'} verified${result.pending ? `; ${result.pending} pending` : ''}.${result.skipped ? ` ${result.skipped} skipped.` : ''}` , error: result.pending > 0 });
+    }, '');
   }
   function exportCsv() {
     const rows = selection.length ? selection : filtered;
@@ -57,7 +66,7 @@ export function OutreachBoard({ scanning, scanDetail, contacts, jobs, initialId,
     <div className="queue-toolbar"><div className="tabs" aria-label="Contact status">{summary.map(item => <button key={item} aria-pressed={tab === item} className={tab === item ? 'selected' : ''} onClick={() => { setTab(item); setSelected([]); setExpanded(null); }}>{item} ({contacts.filter(contact => category(contact) === item).length})</button>)}</div><button className="button secondary" disabled={!filtered.length} onClick={exportCsv}>Export CSV</button></div>
     <div className="queue-filters"><label>Search contacts<input type="search" value={query} onChange={event => setQuery(event.target.value)} placeholder="Name, company, role or city"/></label><label>Company<select value={company} onChange={event => setCompany(event.target.value)}><option>All companies</option>{[...new Set(contacts.map(contact => contact.company))].sort().map(value => <option key={value}>{value}</option>)}</select></label><label>Sort by<select value={sort} onChange={event => setSort(event.target.value)}><option value="newest">Recently found</option><option value="company">Company</option><option value="person">Person</option></select></label><label>Show<select value={limit} onChange={event => setLimit(Number(event.target.value))}><option value={25}>25 contacts</option><option value={50}>50 contacts</option><option value={10000}>All contacts</option></select></label></div>
     {feedback && <div className={`queue-feedback ${feedback.error ? 'error' : ''}`} role={feedback.error ? 'alert' : 'status'}>{feedback.text}{undoIds.length > 0 && <button disabled={pending} className="text-button" onClick={() => perform(async () => { for (const id of undoIds) { const contact = contacts.find(item => item.id === id); if (contact) await action(contact, { action: 'restore' }); } setUndoIds([]); }, 'Deletion undone.')}>Undo deletion</button>}</div>}
-    {selection.length > 0 && <div className="selection-toolbar"><strong>{selection.length} selected</strong><button className="text-button" disabled={pending} onClick={() => copy(selection.map(contact => `${contact.name}\t${contact.company}\t${contact.profileUrl}\t${contact.message}`).join('\n'), 'Selected contacts')}>Copy selected</button>{tab !== 'Deleted' && <button className="text-button danger" disabled={pending} onClick={() => remove(selection)}>Delete selected</button>}<button className="text-button" onClick={() => setSelected([])}>Clear selection</button><small>Sending and confirming delivery stay individual.</small></div>}
+    {selection.length > 0 && <div className="selection-toolbar"><strong>{selection.length} selected</strong><button className="text-button" disabled={pending} onClick={() => copy(selection.map(contact => `${contact.name}\t${contact.company}\t${contact.profileUrl}\t${contact.message}`).join('\n'), 'Selected contacts')}>Copy selected</button>{doneSelection.length > 0 && <button className="text-button" disabled={pending} onClick={markSelectedDone}>Mark {doneSelection.length} as done</button>}{tab !== 'Deleted' && <button className="text-button danger" disabled={pending} onClick={() => remove(selection)}>Delete selected</button>}<button className="text-button" onClick={() => setSelected([])}>Clear selection</button><small>Only mark done after you have confirmed delivery on LinkedIn.</small></div>}
     <div className="outreach-table-wrap dashboard-table-wrap"><table className="outreach-table dashboard-table"><thead><tr><th><input type="checkbox" aria-label="Select all visible contacts" checked={visible.length > 0 && visible.every(contact => selected.includes(contact.id))} onChange={event => setSelected(event.target.checked ? [...new Set([...selected, ...visible.map(contact => contact.id)])] : selected.filter(id => !visible.some(contact => contact.id === id)))}/></th><th>Person & company</th><th>Job signal</th><th>Outreach message</th><th>Connection & tracker</th><th>Actions</th></tr></thead><tbody>
       {visible.map(contact => {
         const job = jobs.find(item => item.id === contact.jobId);

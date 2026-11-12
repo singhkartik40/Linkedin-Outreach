@@ -215,6 +215,18 @@ function App() {
     } catch (error) { await refresh().catch(() => {}); setNotice({ text: (error as Error).message, error: true }); }
     finally { setBusy(''); }
   }
+  async function markDoneMany(contacts: Contact[]) {
+    const result = await api('/contacts/done', { contactIds: contacts.map(contact => contact.id) });
+    for (const contact of contacts) {
+      const receiptToken = outreachReceipts.current.get(contact.id);
+      if (!receiptToken) continue;
+      const acknowledgement = await requestHelper('ack-delivery', { contactId: contact.id, receiptToken, manual: true });
+      if (acknowledgement.ok) outreachReceipts.current.delete(contact.id);
+    }
+    saveReceipts();
+    await refresh();
+    return result as { completed: number; sheetUpdated: number; pending: number; skipped: number };
+  }
   async function retrySheet(contact: Contact) {
     setBusy('sheet'); setNotice(null);
     try {
@@ -311,7 +323,7 @@ function App() {
           <p>{discoveryMode === 'founders' ? 'Google → startups → LinkedIn founders. Current roles checked; no job opening required.' : '2 designers + 2 HR contacts per company. Founder discovery runs separately on Google.'}</p>
         </section>
         {discoveryMode === 'team' && <CityPicker cities={cities} change={changeCities} disabled={peopleScanning}/>}
-        <OutreachBoard scanning={peopleScanning} scanDetail={scanProgress?.detail} key={discoveryMode} contacts={state.contacts.filter(contact => isFounder(contact) === (discoveryMode === 'founders'))} jobs={state.jobs} initialId={selectedContactId} send={prepareOutreach} done={markDone} retry={retrySheet} save={async (contact, input) => { await api(`/contacts/${contact.id}`, input); await refresh(); }} action={async (contact, input) => { await api(`/contacts/${contact.id}/actions`, input); await refresh(); }}/>
+        <OutreachBoard scanning={peopleScanning} scanDetail={scanProgress?.detail} key={discoveryMode} contacts={state.contacts.filter(contact => isFounder(contact) === (discoveryMode === 'founders'))} jobs={state.jobs} initialId={selectedContactId} send={prepareOutreach} done={markDone} doneMany={markDoneMany} retry={retrySheet} save={async (contact, input) => { await api(`/contacts/${contact.id}`, input); await refresh(); }} action={async (contact, input) => { await api(`/contacts/${contact.id}/actions`, input); await refresh(); }}/>
       </>}
       {page === 'Job research' && <>
         <PageHeading eyebrow="JOB BOARD" title={selected ? 'Look beyond the listing.' : 'Your next role. One workspace.'} description="India only. Jobicy refreshes hourly; Remotive every 6 hours while the service runs. LinkedIn scans run hourly with this dashboard open in signed-in Chrome; coverage is limited to visible search results, not every LinkedIn job." action={<div className="heading-actions"><button className="button primary" disabled={!!busy} onClick={refreshBoard}>{busy === 'board' ? 'Refreshing…' : 'Refresh job feeds'}</button><button className="button secondary" disabled={peopleScanning} onClick={() => scanPeople(false, false, undefined, true)}>Scan recent LinkedIn jobs</button><a className="button secondary" href="https://www.linkedin.com/jobs/search/?keywords=UX%20Designer&location=India&f_TPR=r86400&f_JT=F" target="_blank" rel="noreferrer">Open LinkedIn ↗</a></div>}/>

@@ -108,7 +108,9 @@ test('local API guards, import lifecycle, key redaction, and sending gate', asyn
     assert.equal((await (await confirm()).json()).alreadyDone, true);
     assert.equal((await post(`/contacts/${contactId}/confirm-from-helper`, { receiptToken: 'wrong-token' })).status, 403);
     assert.ok(!(await (await fetch(`${base}/api/state`)).text()).includes('helperReceiptHash'));
-    assert.equal((await post(`/contacts/${contactId}/done`, {})).status, 200);
+    const bulkDone = await (await post('/contacts/done', { contactIds: [contactId, '00000000-0000-4000-8000-000000000000'] })).json();
+    assert.equal(bulkDone.completed, 1);
+    assert.equal(bulkDone.skipped, 1);
     const doneState = await (await fetch(`${base}/api/state`)).json();
     assert.equal(doneState.contacts[0].status, 'Send confirmed');
     assert.equal(doneState.contacts[0].sheetSyncStatus, 'Awaiting Sheet update');
